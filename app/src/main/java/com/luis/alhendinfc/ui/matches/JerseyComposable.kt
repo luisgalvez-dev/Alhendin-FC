@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -21,15 +22,22 @@ import androidx.compose.ui.unit.sp
 import com.luis.alhendinfc.domain.model.CallupStatus
 
 /**
- * Draws a realistic football jersey using Canvas bezier paths.
+ * Football jersey icon drawn on Canvas.
  *
- * Shape: crew/round collar, wide shoulders, short sleeves with concave armhole,
- * rectangular body with slight taper. All coordinates are relative to canvas size.
+ * Path mirrors ic_jersey.xml (100×100 viewport → normalised 0..1 coords):
  *
- * Visual style per status (matching reference images):
- *   TITULAR  → solid dark-green fill, mint number
- *   SUPLENTE → transparent fill with thick amber outline, dark-amber number
- *   NONE     → light-grey fill with thin grey outline, grey number
+ *   M 34,10 C 38,24 62,24 66,10   <- round crew collar (U-dip)
+ *   L 100,10                       <- right shoulder/sleeve top (flat bar)
+ *   L 100,44  L 79,44              <- right sleeve + horizontal cuff
+ *   L 79,95   L 21,95              <- right body + bottom hem
+ *   L 21,44   L 0,44               <- left body + horizontal cuff
+ *   L 0,10                         <- left sleeve/shoulder top
+ *   Z                              <- close back to left collar
+ *
+ * Styles:
+ *   TITULAR  → solid dark-green fill, white number
+ *   SUPLENTE → no fill, thick amber outline, amber number
+ *   NONE     → light-grey fill, thin grey outline, grey number
  */
 @Composable
 fun JerseyIcon(
@@ -40,22 +48,23 @@ fun JerseyIcon(
 ) {
     val fillColor = when (status) {
         CallupStatus.TITULAR  -> Color(0xFF1B5E20)
-        CallupStatus.SUPLENTE -> Color(0xFFF9A825).copy(alpha = 0.10f)
-        CallupStatus.NONE     -> Color(0xFFEEEEEE)
+        CallupStatus.SUPLENTE -> Color.Transparent
+        CallupStatus.NONE     -> Color(0xFFE8E8E8)
     }
-    val borderColor = when (status) {
+    val strokeColor = when (status) {
         CallupStatus.TITULAR  -> Color(0xFF2E7D32)
         CallupStatus.SUPLENTE -> Color(0xFFF9A825)
         CallupStatus.NONE     -> Color(0xFFBDBDBD)
     }
     val numberColor = when (status) {
-        CallupStatus.TITULAR  -> Color(0xFF80CBC4)   // mint
-        CallupStatus.SUPLENTE -> Color(0xFFE65100)   // deep amber
+        CallupStatus.TITULAR  -> Color.White
+        CallupStatus.SUPLENTE -> Color(0xFFF9A825)
         CallupStatus.NONE     -> Color(0xFF9E9E9E)
     }
-    val borderWidth = when (status) {
-        CallupStatus.SUPLENTE -> 0.050f  // thick outline for the yellow style
-        else                  -> 0.030f
+    val strokeWidthFraction = when (status) {
+        CallupStatus.SUPLENTE -> 0.060f
+        CallupStatus.NONE     -> 0.035f
+        CallupStatus.TITULAR  -> 0.028f
     }
 
     Box(
@@ -63,138 +72,80 @@ fun JerseyIcon(
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = this.size.width
-            val h = this.size.height
-
-            // ── Jersey silhouette path (clockwise) ─────────────────────────
-            //
-            //         ╭──collar──╮
-            //    ╱──────╮       ╭──────╲
-            //   │ sleeve│       │sleeve │
-            //    ╲──────╯       ╰──────╱
-            //        │               │
-            //        └───────────────┘
-            //
-            val jerseyPath = Path().apply {
-                // Left collar edge
-                moveTo(w * 0.30f, h * 0.17f)
-
-                // Round crew-neck arc, peaking near the top
-                cubicTo(
-                    w * 0.34f, h * 0.02f,
-                    w * 0.66f, h * 0.02f,
-                    w * 0.70f, h * 0.17f
-                )
-
-                // Right shoulder – diagonal outward line
-                lineTo(w * 0.92f, h * 0.13f)
-
-                // Right sleeve outer edge (top → bottom)
-                lineTo(w * 1.00f, h * 0.28f)
-                lineTo(w * 1.00f, h * 0.52f)
-
-                // Right sleeve inner / cuff
-                lineTo(w * 0.82f, h * 0.52f)
-
-                // Right armhole – concave curve into the body
-                // Control point pulled RIGHT creates the inward concave dip
-                quadraticTo(
-                    w * 0.89f, h * 0.45f,
-                    w * 0.79f, h * 0.40f
-                )
-
-                // Right body side down to hem (very slight inward taper)
-                lineTo(w * 0.84f, h * 0.97f)
-
-                // Bottom hem
-                lineTo(w * 0.16f, h * 0.97f)
-
-                // Left body side up to armhole junction
-                lineTo(w * 0.21f, h * 0.40f)
-
-                // Left armhole – concave curve, control point pulled LEFT
-                quadraticTo(
-                    w * 0.11f, h * 0.45f,
-                    w * 0.18f, h * 0.52f
-                )
-
-                // Left sleeve inner / cuff
-                lineTo(w * 0.00f, h * 0.52f)
-
-                // Left sleeve outer edge (bottom → top)
-                lineTo(w * 0.00f, h * 0.28f)
-
-                // Left shoulder – diagonal inward line
-                lineTo(w * 0.08f, h * 0.13f)
-
-                // Close back to left collar
-                lineTo(w * 0.30f, h * 0.17f)
-                close()
-            }
+            val jerseyPath = jerseyPath(this.size.width, this.size.height)
 
             // Fill
             drawPath(jerseyPath, fillColor)
 
-            // Outline border
+            // Outline
             drawPath(
                 jerseyPath,
-                borderColor,
+                strokeColor,
                 style = Stroke(
-                    width = w * borderWidth,
+                    width = this.size.width * strokeWidthFraction,
                     join  = StrokeJoin.Round,
                     cap   = StrokeCap.Round
                 )
             )
-
-            // ── Collar band ────────────────────────────────────────────────
-            // Draw the neckline arc again with a thick line to simulate the
-            // collar rib, then overlay with fill colour for the inner highlight.
-            val collarPath = Path().apply {
-                moveTo(w * 0.30f, h * 0.17f)
-                cubicTo(
-                    w * 0.34f, h * 0.02f,
-                    w * 0.66f, h * 0.02f,
-                    w * 0.70f, h * 0.17f
-                )
-            }
-            // Outer collar band
-            drawPath(
-                collarPath,
-                borderColor,
-                style = Stroke(width = w * (borderWidth + 0.028f), cap = StrokeCap.Round)
-            )
-            // Inner collar highlight (same as fill, creates band illusion)
-            drawPath(
-                collarPath,
-                fillColor,
-                style = Stroke(width = w * 0.022f, cap = StrokeCap.Round)
-            )
-
-            // ── Sleeve cuff lines ──────────────────────────────────────────
-            // Thin horizontal lines at the end of each sleeve for definition
-            drawLine(
-                color = borderColor,
-                start = androidx.compose.ui.geometry.Offset(w * 0.00f, h * 0.48f),
-                end   = androidx.compose.ui.geometry.Offset(w * 0.18f, h * 0.48f),
-                strokeWidth = w * 0.022f,
-                cap = StrokeCap.Round
-            )
-            drawLine(
-                color = borderColor,
-                start = androidx.compose.ui.geometry.Offset(w * 0.82f, h * 0.48f),
-                end   = androidx.compose.ui.geometry.Offset(w * 1.00f, h * 0.48f),
-                strokeWidth = w * 0.022f,
-                cap = StrokeCap.Round
-            )
         }
 
-        // Number centred in the body area (offset down past the collar)
+        // Number centred over the body area (~68% of canvas height → offset ~18%)
         Text(
-            text  = if (number > 0) number.toString() else "?",
-            fontSize   = (size.value * 0.28f).sp,
+            text       = if (number > 0) number.toString() else "?",
+            fontSize   = (size.value * 0.30f).sp,
             fontWeight = FontWeight.ExtraBold,
-            color = numberColor,
-            modifier = Modifier.offset(y = size * 0.13f)
+            color      = numberColor,
+            modifier   = Modifier.offset(y = size * 0.14f)
         )
     }
+}
+
+/**
+ * Builds the jersey Path for a given canvas [w] × [h].
+ *
+ * Viewport: 100×100
+ *   - Collar:  M 34,10  C 38,24 62,24 66,10
+ *   - Top bar: L 100,10
+ *   - R sleeve:L 100,44  L 79,44
+ *   - Body:    L 79,95   L 21,95
+ *   - L sleeve:L 21,44   L 0,44
+ *   - Close:   L 0,10    Z
+ */
+private fun DrawScope.jerseyPath(w: Float, h: Float): Path = Path().apply {
+    // Left collar edge (top-left of the collar arc)
+    moveTo(w * 0.34f, h * 0.10f)
+
+    // Crew-neck collar: cubic bezier dipping to ~24% height
+    cubicTo(
+        w * 0.38f, h * 0.24f,
+        w * 0.62f, h * 0.24f,
+        w * 0.66f, h * 0.10f
+    )
+
+    // Flat top bar → right edge (shoulder + sleeve top)
+    lineTo(w * 1.00f, h * 0.10f)
+
+    // Right sleeve: vertical drop to cuff
+    lineTo(w * 1.00f, h * 0.44f)
+
+    // Right sleeve cuff: horizontal line inward to body width
+    lineTo(w * 0.79f, h * 0.44f)
+
+    // Right body side: straight down to hem
+    lineTo(w * 0.79f, h * 0.95f)
+
+    // Bottom hem
+    lineTo(w * 0.21f, h * 0.95f)
+
+    // Left body side: straight up to cuff
+    lineTo(w * 0.21f, h * 0.44f)
+
+    // Left sleeve cuff: horizontal line outward to edge
+    lineTo(w * 0.00f, h * 0.44f)
+
+    // Left sleeve: vertical rise to top
+    lineTo(w * 0.00f, h * 0.10f)
+
+    // Close path (returns to left collar edge at 34%, 10%)
+    close()
 }

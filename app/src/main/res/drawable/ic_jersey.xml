@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Football jersey silhouette — 100 × 100 viewport.
+
+    Shape anatomy (top → bottom):
+      • Round crew collar: cubic bezier from (34,8) dipping to (50,22) back to (66,8)
+      • Shoulders: diagonal lines from collar to sleeve tips
+      • Sleeves: nearly-vertical rectangles reaching the canvas edges
+      • Sleeve cuffs: horizontal lines at ~42% height
+      • Body: straight sides from 21% to 79% width, down to hem at 95%
+
+    The path is filled with fillColor and has no stroke here — stroke colour and
+    width are applied in code via ColorFilter or a second drawPath call.
+-->
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="56dp"
+    android:height="56dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+    <!-- Jersey body -->
+    <path
+        android:name="jersey"
+        android:pathData="
+            M 34,8
+            C 38,22 62,22 66,8
+            L 93,18
+            L 97,46
+            L 79,42
+            L 79,95
+            L 21,95
+            L 21,42
+            L 3,46
+            L 7,18
+            Z"
+        android:fillColor="#FFFFFFFF"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="3.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+
+</vector>
