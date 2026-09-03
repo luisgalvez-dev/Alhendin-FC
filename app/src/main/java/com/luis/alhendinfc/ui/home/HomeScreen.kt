@@ -2,6 +2,7 @@ package com.luis.alhendinfc.ui.home
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -57,6 +60,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.team.TeamEditDialog
+import com.luis.alhendinfc.ui.theme.AmberAccent
+import com.luis.alhendinfc.ui.theme.GreenAccent
+import com.luis.alhendinfc.ui.theme.GreenLime
+import com.luis.alhendinfc.ui.theme.GreenMint
+import com.luis.alhendinfc.ui.theme.TealSoft
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -66,6 +74,8 @@ fun HomeScreen(
     selectedTeam: Team?,
     onNavigateToTeam: () -> Unit,
     onNavigateToMatches: () -> Unit,
+    onNavigateToStatistics: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onAddTeam: (Team) -> Unit,
     onSelectTeam: (Int) -> Unit
 ) {
@@ -85,7 +95,15 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF0A2410),
+                        MaterialTheme.colorScheme.background,
+                        Color(0xFF061408)
+                    )
+                )
+            )
     ) {
         Column(
             modifier = Modifier
@@ -115,6 +133,8 @@ fun HomeScreen(
                         title = "EQUIPO",
                         icon = Icons.Default.Person,
                         enabled = selectedTeam != null,
+                        accent = GreenAccent,
+                        gradient = listOf(Color(0xFF143D1F), Color(0xFF1F6B35)),
                         onClick = onNavigateToTeam,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
@@ -122,6 +142,8 @@ fun HomeScreen(
                         title = "PARTIDOS",
                         icon = Icons.Default.PlayArrow,
                         enabled = selectedTeam != null,
+                        accent = GreenLime,
+                        gradient = listOf(Color(0xFF1A3A22), Color(0xFF2A6B3A)),
                         onClick = onNavigateToMatches,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
@@ -136,11 +158,19 @@ fun HomeScreen(
                     SecondaryCard(
                         title = "ESTADÍSTICAS",
                         icon = Icons.Default.Info,
+                        accent = TealSoft,
+                        enabled = selectedTeam != null,
+                        lockedLabel = if (selectedTeam == null) "Añade un equipo primero" else null,
+                        onClick = onNavigateToStatistics,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
                     SecondaryCard(
                         title = "AJUSTES",
                         icon = Icons.Default.Settings,
+                        accent = AmberAccent,
+                        enabled = selectedTeam != null,
+                        lockedLabel = if (selectedTeam == null) "Añade un equipo primero" else null,
+                        onClick = onNavigateToSettings,
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     )
                 }
@@ -326,6 +356,8 @@ private fun MainCard(
     title: String,
     icon: ImageVector,
     enabled: Boolean,
+    accent: Color,
+    gradient: List<Color>,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -336,26 +368,42 @@ private fun MainCard(
                 else Modifier
             )
             .alpha(if (enabled) 1f else 0.45f),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = if (enabled) 0.55f else 0.2f)),
         shape = RoundedCornerShape(20.dp)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.linearGradient(gradient)),
             contentAlignment = Alignment.Center
         ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(accent)
+            )
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = if (enabled) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(64.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(52.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
@@ -363,7 +411,7 @@ private fun MainCard(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     letterSpacing = 2.sp
                 )
 
@@ -396,51 +444,81 @@ private fun MainCard(
 private fun SecondaryCard(
     title: String,
     icon: ImageVector,
+    accent: Color,
+    enabled: Boolean,
+    lockedLabel: String?,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.alpha(0.4f),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
+        modifier = modifier
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .alpha(if (enabled) 1f else 0.55f),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.dp, accent.copy(alpha = if (enabled) 0.55f else 0.25f)),
         shape = RoundedCornerShape(16.dp)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            accent.copy(alpha = if (enabled) 0.28f else 0.12f)
+                        )
+                    )
+                ),
             contentAlignment = Alignment.Center
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(34.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(accent.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = accent,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
                 Column {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = Color.White,
                         letterSpacing = 1.sp
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(11.dp)
-                        )
+                    if (lockedLabel != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = accent.copy(alpha = 0.7f),
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Text(
+                                text = lockedLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = accent.copy(alpha = 0.85f)
+                            )
+                        }
+                    } else {
                         Text(
-                            text = "Próximamente",
+                            text = "Goles, asistencias, tarjetas…",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = accent.copy(alpha = 0.9f)
                         )
                     }
                 }

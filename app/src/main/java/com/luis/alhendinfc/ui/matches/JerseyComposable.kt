@@ -25,17 +25,20 @@ fun JerseyIcon(
     number: Int,
     status: CallupStatus,
     size: Dp = 56.dp,
+    showNumber: Boolean = true,
+    tint: Color? = null,
     modifier: Modifier = Modifier
 ) {
-    val jerseyColor = when (status) {
-        CallupStatus.TITULAR -> Color(0xFF1B5E20)
-        CallupStatus.SUPLENTE -> Color(0xFFF9A825)
-        CallupStatus.NONE -> Color(0xFFB0B0B0)
+    val jerseyColor = tint ?: when (status) {
+        CallupStatus.TITULAR -> Color(0xFF2E9B4F)
+        CallupStatus.SUPLENTE -> Color(0xFFFFB300)
+        CallupStatus.NONE -> Color(0xFF8A9A8C)
     }
-    val numberColor = when (status) {
-        CallupStatus.TITULAR -> Color.White
-        CallupStatus.SUPLENTE -> Color(0xFF4E342E)
-        CallupStatus.NONE -> Color(0xFF616161)
+    val numberColor = when {
+        tint != null -> Color.White.copy(alpha = 0.55f)
+        status == CallupStatus.TITULAR -> Color.White
+        status == CallupStatus.SUPLENTE -> Color(0xFF4E342E)
+        else -> Color(0xFF616161)
     }
 
     Box(
@@ -49,12 +52,14 @@ fun JerseyIcon(
             contentScale = ContentScale.Fit,
             colorFilter = ColorFilter.tint(jerseyColor)
         )
-        Text(
-            text = if (number > 0) number.toString() else "?",
-            fontSize = (size.value * 0.22f).sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = numberColor,
-            modifier = Modifier.offset(y = size * 0.02f)
-        )
+        if (showNumber) {
+            Text(
+                text = if (number > 0) number.toString() else "?",
+                fontSize = (size.value * 0.22f).sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = numberColor,
+                modifier = Modifier.offset(y = size * 0.02f)
+            )
+        }
     }
 }

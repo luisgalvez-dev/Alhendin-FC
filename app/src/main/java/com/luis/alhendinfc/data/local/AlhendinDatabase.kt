@@ -6,8 +6,15 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [TeamEntity::class, PlayerEntity::class, MatchEntity::class, MatchPlayerEntity::class],
-    version = 4,
+    entities = [
+        TeamEntity::class,
+        PlayerEntity::class,
+        MatchEntity::class,
+        MatchPlayerEntity::class,
+        MatchEventEntity::class,
+        CustomStatTypeEntity::class
+    ],
+    version = 7,
     exportSchema = false
 )
 abstract class AlhendinDatabase : RoomDatabase() {
@@ -15,6 +22,8 @@ abstract class AlhendinDatabase : RoomDatabase() {
     abstract fun teamDao(): TeamDao
     abstract fun playerDao(): PlayerDao
     abstract fun matchDao(): MatchDao
+    abstract fun matchEventDao(): MatchEventDao
+    abstract fun customStatTypeDao(): CustomStatTypeDao
 
     companion object {
         @Volatile

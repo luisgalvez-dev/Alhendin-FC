@@ -26,34 +26,48 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -65,11 +79,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luis.alhendinfc.domain.model.CallupStatus
+import com.luis.alhendinfc.domain.model.Formation
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchPlayer
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.Team
+import com.luis.alhendinfc.ui.theme.AmberAccent
+import com.luis.alhendinfc.ui.theme.GreenAccent
+import com.luis.alhendinfc.ui.theme.GreenLime
+import com.luis.alhendinfc.ui.theme.GreenMint
+import com.luis.alhendinfc.ui.theme.GreenPitch
+import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,9 +103,12 @@ fun MatchSetupScreen(
     onSave: (Match) -> Unit,
     onPlayerCallup: (playerId: Int, status: CallupStatus) -> Unit,
     onDelete: () -> Unit,
+    onContinue: (Match) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     var rival by rememberSaveable(match.id) { mutableStateOf(match.rival) }
     var stadium by rememberSaveable(match.id) { mutableStateOf(match.stadium) }
@@ -93,13 +118,16 @@ fun MatchSetupScreen(
     var isHome by rememberSaveable(match.id) { mutableStateOf(match.isHome) }
     var durationPerPart by rememberSaveable(match.id) { mutableStateOf(match.durationPerPart.toString()) }
     var numParts by rememberSaveable(match.id) { mutableStateOf(match.numParts.toString()) }
-    var formation by rememberSaveable(match.id) { mutableStateOf(match.formation) }
+    var formation by rememberSaveable(match.id) {
+        mutableStateOf(match.formation.ifBlank { Formation.F_4_3_3.label })
+    }
     var notes by rememberSaveable(match.id) { mutableStateOf(match.notes) }
 
-    // Mode: TITULAR or SUPLENTE for jersey assignment
     var activeMode by remember { mutableStateOf(CallupStatus.TITULAR) }
-
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var formationExpanded by remember { mutableStateOf(false) }
 
     // Map playerId → callup status for quick lookup
     val callupMap: Map<Int, CallupStatus> = remember(matchPlayers) {
@@ -108,6 +136,8 @@ fun MatchSetupScreen(
 
     val titulares = teamPlayers.filter { callupMap[it.id] == CallupStatus.TITULAR }
     val suplentes = teamPlayers.filter { callupMap[it.id] == CallupStatus.SUPLENTE }
+    val selectedFormation = Formation.fromLabel(formation)
+    val titularesOk = titulares.size == 11
 
     fun buildCurrentMatch() = match.copy(
         rival = rival,
@@ -136,6 +166,53 @@ fun MatchSetupScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) { Text("Cancelar") }
             }
+        )
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = parseDateToMillis(date) ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { date = formatDate(it) }
+                        showDatePicker = false
+                    }
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showTimePicker) {
+        val parsed = parseTime(time)
+        val timePickerState = rememberTimePickerState(
+            initialHour = parsed.first,
+            initialMinute = parsed.second,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        time = formatTime(timePickerState.hour, timePickerState.minute)
+                        showTimePicker = false
+                    }
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+            },
+            title = { Text("Hora del partido") },
+            text = { TimePicker(state = timePickerState) }
         )
     }
 
@@ -193,10 +270,11 @@ fun MatchSetupScreen(
                     Spacer(Modifier.width(4.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = Color(0xFF12351A)
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
         Row(
@@ -209,19 +287,22 @@ fun MatchSetupScreen(
                 modifier = Modifier
                     .weight(0.55f)
                     .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF0E2A14), Color(0xFF0A1F0E))
+                        )
+                    )
             ) {
-                // Mode indicator bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
                             if (activeMode == CallupStatus.TITULAR)
-                                Color(0xFF1B5E20).copy(alpha = 0.12f)
+                                GreenAccent.copy(alpha = 0.22f)
                             else
-                                Color(0xFFF57F17).copy(alpha = 0.12f)
+                                AmberAccent.copy(alpha = 0.22f)
                         )
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -232,12 +313,12 @@ fun MatchSetupScreen(
                             "Toca jugadores → Suplentes (${suplentes.size})",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (activeMode == CallupStatus.TITULAR) Color(0xFF2E7D32) else Color(0xFFE65100)
+                        color = if (activeMode == CallupStatus.TITULAR) GreenLime else AmberAccent
                     )
                     Text(
                         text = "${teamPlayers.filter { callupMap[it.id] == CallupStatus.NONE || callupMap[it.id] == null }.size} sin convocar",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                     )
                 }
 
@@ -274,7 +355,16 @@ fun MatchSetupScreen(
                                         currentStatus == activeMode -> CallupStatus.NONE
                                         else -> activeMode
                                     }
-                                    onPlayerCallup(player.id, newStatus)
+                                    if (newStatus == CallupStatus.TITULAR &&
+                                        currentStatus != CallupStatus.TITULAR &&
+                                        titulares.size >= 11
+                                    ) {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Ya hay 11 titulares")
+                                        }
+                                    } else {
+                                        onPlayerCallup(player.id, newStatus)
+                                    }
                                 }
                             )
                         }
@@ -295,6 +385,11 @@ fun MatchSetupScreen(
                 modifier = Modifier
                     .weight(0.45f)
                     .fillMaxHeight()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF122B18), Color(0xFF0C1E12))
+                        )
+                    )
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -303,7 +398,7 @@ fun MatchSetupScreen(
                     "Información del partido",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = GreenMint
                 )
 
                 // Local / Visitante selector
@@ -339,24 +434,52 @@ fun MatchSetupScreen(
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = date,
-                        onValueChange = { date = it },
-                        label = { Text("Fecha") },
-                        placeholder = { Text("dd/mm/aaaa") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                    )
-                    OutlinedTextField(
-                        value = time,
-                        onValueChange = { time = it },
-                        label = { Text("Hora") },
-                        placeholder = { Text("hh:mm") },
-                        singleLine = true,
-                        modifier = Modifier.weight(0.6f),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        OutlinedTextField(
+                            value = date.ifBlank { "Elige fecha" },
+                            onValueChange = {},
+                            enabled = false,
+                            label = { Text("Fecha") },
+                            singleLine = true,
+                            trailingIcon = {
+                                Icon(Icons.Default.DateRange, contentDescription = "Elegir fecha")
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledTrailingIconColor = GreenMint,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { showDatePicker = true }
+                        )
+                    }
+                    Box(modifier = Modifier.weight(0.6f)) {
+                        OutlinedTextField(
+                            value = time.ifBlank { "Elige hora" },
+                            onValueChange = {},
+                            enabled = false,
+                            label = { Text("Hora") },
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { showTimePicker = true }
+                        )
+                    }
                 }
 
                 OutlinedTextField(
@@ -407,7 +530,6 @@ fun MatchSetupScreen(
                     )
                 }
 
-                // Auto counters
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -415,25 +537,57 @@ fun MatchSetupScreen(
                     ConvocadosCounter(
                         label = "Titulares",
                         count = titulares.size,
-                        color = Color(0xFF2E7D32),
+                        color = if (titularesOk) GreenAccent else Color(0xFFFF6B7A),
                         modifier = Modifier.weight(1f)
                     )
                     ConvocadosCounter(
                         label = "Suplentes",
                         count = suplentes.size,
-                        color = Color(0xFFE65100),
+                        color = AmberAccent,
                         modifier = Modifier.weight(1f)
                     )
                 }
+                if (!titularesOk) {
+                    Text(
+                        text = "La alineación necesita exactamente 11 titulares (${titulares.size}/11)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFC62828)
+                    )
+                }
 
-                OutlinedTextField(
-                    value = formation,
-                    onValueChange = { formation = it },
-                    label = { Text("Alineación") },
-                    placeholder = { Text("4-3-3") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                ExposedDropdownMenuBox(
+                    expanded = formationExpanded,
+                    onExpandedChange = { formationExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = formation,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Alineación") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(formationExpanded) },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = formationExpanded,
+                        onDismissRequest = { formationExpanded = false }
+                    ) {
+                        Formation.entries.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(item.label) },
+                                onClick = {
+                                    formation = item.label
+                                    formationExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                LineupField(
+                    formation = selectedFormation,
+                    titulares = titulares
                 )
 
                 OutlinedTextField(
@@ -451,13 +605,43 @@ fun MatchSetupScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                // CONTINUAR (placeholder for future live match)
-                androidx.compose.material3.Button(
-                    onClick = { onSave(buildCurrentMatch()) },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(10.dp)
+                if (match.status != MatchStatus.FINISHED) {
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            if (!titularesOk) {
+                                scope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        "Necesitas exactamente 11 titulares para empezar el partido"
+                                    )
+                                }
+                            } else {
+                                val current = buildCurrentMatch()
+                                onSave(current)
+                                onContinue(current)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GreenAccent,
+                            contentColor = Color(0xFF06210C)
+                        )
+                    ) {
+                        Text("CONTINUAR → PARTIDO EN VIVO", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        onSave(buildCurrentMatch())
+                        scope.launch { snackbarHostState.showSnackbar("Convocatoria guardada") }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.5.dp, GreenMint),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = GreenMint)
                 ) {
-                    Text("GUARDAR PARTIDO", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("GUARDAR CONVOCATORIA", fontWeight = FontWeight.Bold)
                 }
 
                 OutlinedButton(
@@ -484,8 +668,8 @@ private fun JerseyModeButton(
     count: Int,
     onClick: () -> Unit
 ) {
-    val jerseyColor = if (mode == CallupStatus.TITULAR) Color(0xFF2E7D32) else Color(0xFFF9A825)
-    val bgColor = if (isActive) jerseyColor.copy(alpha = 0.15f) else Color.Transparent
+    val jerseyColor = if (mode == CallupStatus.TITULAR) GreenAccent else AmberAccent
+    val bgColor = if (isActive) jerseyColor.copy(alpha = 0.2f) else Color.Transparent
     val borderColor = if (isActive) jerseyColor else Color.Transparent
 
     Surface(
@@ -534,15 +718,15 @@ private fun CallupPlayerCard(
         elevation = CardDefaults.cardElevation(defaultElevation = if (isConvoked) 3.dp else 1.dp),
         colors = CardDefaults.cardColors(
             containerColor = when (status) {
-                CallupStatus.TITULAR -> Color(0xFF1B5E20).copy(alpha = 0.08f)
-                CallupStatus.SUPLENTE -> Color(0xFFF57F17).copy(alpha = 0.08f)
+                CallupStatus.TITULAR -> GreenAccent.copy(alpha = 0.16f)
+                CallupStatus.SUPLENTE -> AmberAccent.copy(alpha = 0.16f)
                 CallupStatus.NONE -> MaterialTheme.colorScheme.surface
             }
         ),
         border = if (isConvoked) BorderStroke(
             1.5.dp,
-            if (status == CallupStatus.TITULAR) Color(0xFF2E7D32) else Color(0xFFF9A825)
-        ) else null
+            if (status == CallupStatus.TITULAR) GreenAccent else AmberAccent
+        ) else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
     ) {
         Column(
             modifier = Modifier
@@ -632,6 +816,42 @@ private fun ConvocadosCounter(
             color = color
         )
     }
+}
+
+private fun parseDateToMillis(date: String): Long? {
+    val parts = date.split("/")
+    if (parts.size != 3) return null
+    val day = parts[0].toIntOrNull() ?: return null
+    val month = parts[1].toIntOrNull() ?: return null
+    val year = parts[2].toIntOrNull() ?: return null
+    return Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+        set(Calendar.YEAR, year)
+        set(Calendar.MONTH, month - 1)
+        set(Calendar.DAY_OF_MONTH, day)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+}
+
+private fun formatDate(millis: Long): String {
+    val calendar = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = millis }
+    val day = calendar.get(Calendar.DAY_OF_MONTH).toString().padStart(2, '0')
+    val month = (calendar.get(Calendar.MONTH) + 1).toString().padStart(2, '0')
+    val year = calendar.get(Calendar.YEAR)
+    return "$day/$month/$year"
+}
+
+private fun parseTime(time: String): Pair<Int, Int> {
+    val parts = time.split(":")
+    val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 12
+    val minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+    return hour to minute
+}
+
+private fun formatTime(hour: Int, minute: Int): String {
+    return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 }
 
 private fun exportConvocatoriaPdf(

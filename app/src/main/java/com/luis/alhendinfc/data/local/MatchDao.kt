@@ -37,4 +37,41 @@ interface MatchDao {
 
     @Query("DELETE FROM match_player WHERE matchId = :matchId AND playerId = :playerId")
     suspend fun deleteMatchPlayer(matchId: Int, playerId: Int)
+
+    @Query("UPDATE match_player SET isOnField = :onField WHERE matchId = :matchId AND playerId = :playerId")
+    suspend fun setOnField(matchId: Int, playerId: Int, onField: Boolean)
+
+    @Query("UPDATE match_player SET isOnField = 1 WHERE matchId = :matchId AND callupStatus = 'TITULAR'")
+    suspend fun putTitularesOnField(matchId: Int)
+
+    @Query("UPDATE match_player SET isOnField = 0 WHERE matchId = :matchId")
+    suspend fun clearOnField(matchId: Int)
+
+    /** Convocatorias en partidos finalizados del equipo (para PJ de temporada). */
+    @Query(
+        """
+        SELECT mp.* FROM match_player mp
+        INNER JOIN match_table m ON m.id = mp.matchId
+        WHERE m.teamId = :teamId AND m.status = 'FINISHED'
+          AND mp.callupStatus IN ('TITULAR', 'SUPLENTE')
+        """
+    )
+    fun getFinishedCallupsByTeam(teamId: Int): Flow<List<MatchPlayerEntity>>
+
+    @Query("UPDATE match_event SET playerId = :keepId WHERE playerId = :dupId")
+    suspend fun reassignEventPlayerId(dupId: Int, keepId: Int)
+
+    @Query("UPDATE match_event SET relatedPlayerId = :keepId WHERE relatedPlayerId = :dupId")
+    suspend fun reassignEventRelatedPlayerId(dupId: Int, keepId: Int)
+
+    @Query("SELECT * FROM match_player WHERE playerId = :playerId")
+    suspend fun getMatchPlayersByPlayer(playerId: Int): List<MatchPlayerEntity>
+
+    @Query("DELETE FROM match_player WHERE id = :id")
+    suspend fun deleteMatchPlayerById(id: Int)
+
+    @Query(
+        "UPDATE match_player SET playerId = :keepId WHERE id = :rowId"
+    )
+    suspend fun updateMatchPlayerPlayerId(rowId: Int, keepId: Int)
 }

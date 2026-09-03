@@ -1,5 +1,6 @@
 package com.luis.alhendinfc.ui.matches
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,6 +37,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -47,11 +51,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchStatus
+import com.luis.alhendinfc.ui.theme.AmberAccent
+import com.luis.alhendinfc.ui.theme.GreenAccent
+import com.luis.alhendinfc.ui.theme.GreenMint
+import com.luis.alhendinfc.ui.theme.GreenPitch
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,7 +75,7 @@ fun MatchListScreen(
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val openMatches = matches.filter { it.status == MatchStatus.OPEN }
+    val openMatches = matches.filter { it.status == MatchStatus.OPEN || it.status == MatchStatus.LIVE }
     val finishedMatches = matches.filter { it.status == MatchStatus.FINISHED }
 
     Scaffold(
@@ -93,7 +102,11 @@ fun MatchListScreen(
                     }
                     Button(
                         onClick = onCreateNew,
-                        modifier = Modifier.padding(end = 12.dp)
+                        modifier = Modifier.padding(end = 12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GreenPitch,
+                            contentColor = Color.White
+                        )
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -101,8 +114,8 @@ fun MatchListScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = Color(0xFF12351A),
+                    titleContentColor = Color.White
                 )
             )
         },
@@ -113,10 +126,22 @@ fun MatchListScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF0E2614), MaterialTheme.colorScheme.background)
+                    )
+                )
         ) {
             TabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surface
+                containerColor = Color(0xFF12351A),
+                contentColor = GreenMint,
+                indicator = { tabPositions ->
+                    TabRowDefaults.SecondaryIndicator(
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        color = GreenAccent
+                    )
+                }
             ) {
                 Tab(
                     selected = selectedTab == 0,
@@ -200,7 +225,21 @@ private fun MatchCard(match: Match, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        border = BorderStroke(
+            1.dp,
+            when (match.status) {
+                MatchStatus.OPEN -> GreenAccent.copy(alpha = 0.45f)
+                MatchStatus.LIVE -> Color(0xFFFF7043).copy(alpha = 0.6f)
+                MatchStatus.FINISHED -> AmberAccent.copy(alpha = 0.35f)
+            }
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = when (match.status) {
+                MatchStatus.OPEN -> Color(0xFF143D22)
+                MatchStatus.LIVE -> Color(0xFF3D2414)
+                MatchStatus.FINISHED -> Color(0xFF1A2A20)
+            }
+        )
     ) {
         Row(
             modifier = Modifier
@@ -258,8 +297,9 @@ private fun MatchCard(match: Match, onClick: () -> Unit) {
 @Composable
 private fun MatchStatusBadge(status: MatchStatus) {
     val (text, bg, fg) = when (status) {
-        MatchStatus.OPEN -> Triple("Abierto", Color(0xFF1B5E20), Color.White)
-        MatchStatus.FINISHED -> Triple("Finalizado", Color(0xFF37474F), Color.White)
+        MatchStatus.OPEN -> Triple("Abierto", GreenAccent, Color(0xFF06210C))
+        MatchStatus.LIVE -> Triple("En vivo", Color(0xFFFF7043), Color.White)
+        MatchStatus.FINISHED -> Triple("Finalizado", AmberAccent, Color(0xFF2A1A00))
     }
     Box(
         modifier = Modifier

@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 
 class PlayerViewModel(
     private val repository: PlayerRepository,
-    teamId: Int
+    private val teamId: Int
 ) : ViewModel() {
 
     val players: StateFlow<List<Player>> = repository.getPlayersByTeam(teamId)
@@ -28,6 +28,12 @@ class PlayerViewModel(
 
     private val _selectedPlayer = MutableStateFlow<Player?>(null)
     val selectedPlayer: StateFlow<Player?> = _selectedPlayer
+
+    init {
+        viewModelScope.launch {
+            repository.ensureSampleSquad(teamId)
+        }
+    }
 
     fun addPlayer(player: Player) {
         viewModelScope.launch { repository.addPlayer(player) }
@@ -51,7 +57,7 @@ class PlayerViewModel(
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     val db = AlhendinDatabase.getInstance(context)
-                    val repository = PlayerRepositoryImpl(db.playerDao())
+                    val repository = PlayerRepositoryImpl(db.playerDao(), db.matchDao())
                     return PlayerViewModel(repository, teamId) as T
                 }
             }

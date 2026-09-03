@@ -12,5 +12,6 @@ data class MatchPlayerEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val matchId: Int,
     val playerId: Int,
-    val callupStatus: String = "NONE"
+    val callupStatus: String = "NONE",
+    val isOnField: Boolean = false
 )

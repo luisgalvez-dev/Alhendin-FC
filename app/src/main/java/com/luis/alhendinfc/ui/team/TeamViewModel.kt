@@ -6,6 +6,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.local.AlhendinDatabase
 import com.luis.alhendinfc.domain.model.Team
+import com.luis.alhendinfc.domain.repository.CustomStatTypeRepository
+import com.luis.alhendinfc.domain.repository.CustomStatTypeRepositoryImpl
+import com.luis.alhendinfc.domain.repository.PlayerRepository
+import com.luis.alhendinfc.domain.repository.PlayerRepositoryImpl
 import com.luis.alhendinfc.domain.repository.TeamRepository
 import com.luis.alhendinfc.domain.repository.TeamRepositoryImpl
 import kotlinx.coroutines.flow.SharingStarted
@@ -13,7 +17,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class TeamViewModel(private val repository: TeamRepository) : ViewModel() {
+class TeamViewModel(
+    private val repository: TeamRepository,
+    private val playerRepository: PlayerRepository,
+    private val customStatRepository: CustomStatTypeRepository
+) : ViewModel() {
 
     val teams: StateFlow<List<Team>> = repository.getAllTeams()
         .stateIn(
@@ -30,7 +38,11 @@ class TeamViewModel(private val repository: TeamRepository) : ViewModel() {
         )
 
     fun addTeam(team: Team) {
-        viewModelScope.launch { repository.addTeam(team) }
+        viewModelScope.launch {
+            val teamId = repository.addTeam(team)
+            playerRepository.ensureSampleSquad(teamId)
+            customStatRepository.ensureSampleCustomStats(teamId)
+        }
     }
 
     fun updateTeam(team: Team) {
@@ -45,14 +57,35 @@ class TeamViewModel(private val repository: TeamRepository) : ViewModel() {
         viewModelScope.launch { repository.selectTeam(teamId) }
     }
 
+    fun ensureSampleSquadForSelectedTeam() {
+        viewModelScope.launch {
+            val teamId = selectedTeam.value?.id ?: return@launch
+            playerRepository.ensureSampleSquad(teamId)
+            customStatRepository.ensureSampleCustomStats(teamId)
+        }
+    }
+
+    init {
+        viewModelScope.launch {
+            selectedTeam.collect { team ->
+                val id = team?.id ?: return@collect
+                playerRepository.ensureSampleSquad(id)
+                customStatRepository.ensureSampleCustomStats(id)
+            }
+        }
+    }
+
     companion object {
         fun factory(context: Context): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     val db = AlhendinDatabase.getInstance(context)
-                    val repository = TeamRepositoryImpl(db.teamDao())
-                    return TeamViewModel(repository) as T
+                    return TeamViewModel(
+                        TeamRepositoryImpl(db.teamDao()),
+                        PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
+                        CustomStatTypeRepositoryImpl(db.customStatTypeDao())
+                    ) as T
                 }
             }
     }

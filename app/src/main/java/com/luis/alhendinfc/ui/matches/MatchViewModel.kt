@@ -36,6 +36,12 @@ class MatchViewModel(
 
     private val _activeMatchId = MutableStateFlow<Int?>(null)
 
+    init {
+        viewModelScope.launch {
+            playerRepository.ensureSampleSquad(teamId)
+        }
+    }
+
     val currentMatch: StateFlow<Match?> = _activeMatchId
         .flatMapLatest { id -> if (id != null) matchRepository.getMatchById(id) else flowOf(null) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -87,8 +93,8 @@ class MatchViewModel(
                 val db = AlhendinDatabase.getInstance(context.applicationContext)
                 @Suppress("UNCHECKED_CAST")
                 return MatchViewModel(
-                    MatchRepositoryImpl(db.matchDao()),
-                    PlayerRepositoryImpl(db.playerDao()),
+                    MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
+                    PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
                     teamId
                 ) as T
             }

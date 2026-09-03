@@ -20,6 +20,18 @@ interface PlayerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(player: PlayerEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(players: List<PlayerEntity>)
+
+    @Query("SELECT COUNT(*) FROM player WHERE teamId = :teamId")
+    suspend fun countByTeam(teamId: Int): Int
+
+    @Query("SELECT * FROM player WHERE teamId = :teamId ORDER BY jerseyNumber ASC, id ASC")
+    suspend fun getAllByTeamOnce(teamId: Int): List<PlayerEntity>
+
+    @Query("DELETE FROM player WHERE id = :playerId")
+    suspend fun deleteById(playerId: Int)
+
     @Update
     suspend fun update(player: PlayerEntity)
 

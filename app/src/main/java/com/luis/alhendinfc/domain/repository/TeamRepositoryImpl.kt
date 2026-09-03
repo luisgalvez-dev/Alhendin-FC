@@ -14,9 +14,9 @@ class TeamRepositoryImpl(private val dao: TeamDao) : TeamRepository {
     override fun getSelectedTeam(): Flow<Team?> =
         dao.getSelectedTeam().map { it?.toDomain() }
 
-    override suspend fun addTeam(team: Team) {
+    override suspend fun addTeam(team: Team): Int {
         val isFirst = dao.getTeamCount() == 0
-        dao.insertTeam(team.toEntity().copy(isSelected = isFirst))
+        return dao.insertTeam(team.toEntity().copy(isSelected = isFirst)).toInt()
     }
 
     override suspend fun updateTeam(team: Team) {
