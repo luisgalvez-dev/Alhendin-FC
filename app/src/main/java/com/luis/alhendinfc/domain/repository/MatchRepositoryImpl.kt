@@ -104,7 +104,9 @@ class MatchRepositoryImpl(
             MatchStatus.OPEN
         },
         homeScore = homeScore,
-        awayScore = awayScore
+        awayScore = awayScore,
+        opponentClubId = opponentClubId,
+        rivalShieldUri = rivalShieldUri
     )
 
     private fun Match.toEntity() = MatchEntity(
@@ -122,7 +124,9 @@ class MatchRepositoryImpl(
         notes = notes,
         status = status.name,
         homeScore = homeScore,
-        awayScore = awayScore
+        awayScore = awayScore,
+        opponentClubId = opponentClubId,
+        rivalShieldUri = rivalShieldUri
     )
 
     private fun MatchPlayerEntity.toDomain() = MatchPlayer(

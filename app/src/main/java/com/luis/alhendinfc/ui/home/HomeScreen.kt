@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -58,6 +60,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luis.alhendinfc.domain.model.FixtureRow
+import com.luis.alhendinfc.domain.model.HomeLayoutConfig
+import com.luis.alhendinfc.domain.model.HomeModule
+import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.team.TeamEditDialog
 import com.luis.alhendinfc.ui.theme.AmberAccent
@@ -72,14 +78,29 @@ import kotlinx.coroutines.withContext
 fun HomeScreen(
     teams: List<Team>,
     selectedTeam: Team?,
+    layoutConfig: HomeLayoutConfig,
+    nextFixture: FixtureRow?,
+    liveMatch: Match?,
     onNavigateToTeam: () -> Unit,
     onNavigateToMatches: () -> Unit,
+    onNavigateToCalendar: () -> Unit,
+    onNavigateToPizarra: () -> Unit,
     onNavigateToStatistics: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToLive: (matchId: Int) -> Unit,
+    onNavigateToNextMatch: () -> Unit,
     onAddTeam: (Team) -> Unit,
     onSelectTeam: (Int) -> Unit
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
+    val hasTeam = selectedTeam != null
+    val lockedHint = "Añade un equipo primero"
+
+    val visibleModules = remember(layoutConfig, liveMatch) {
+        layoutConfig.visibleOrdered.filter { module ->
+            module != HomeModule.LIVE_MATCH || liveMatch != null
+        }
+    }
 
     if (showAddDialog) {
         TeamEditDialog(
@@ -119,61 +140,149 @@ fun HomeScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.62f),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+            if (visibleModules.isEmpty()) {
+                Text(
+                    "No hay módulos activos. Actívalos en Ajustes → Personalizar inicio.",
+                    color = AmberAccent,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            } else {
+                val rows = visibleModules.chunked(3)
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    MainCard(
-                        title = "EQUIPO",
-                        icon = Icons.Default.Person,
-                        enabled = selectedTeam != null,
-                        accent = GreenAccent,
-                        gradient = listOf(Color(0xFF143D1F), Color(0xFF1F6B35)),
-                        onClick = onNavigateToTeam,
-                        modifier = Modifier.weight(1f).fillMaxHeight()
-                    )
-                    MainCard(
-                        title = "PARTIDOS",
-                        icon = Icons.Default.PlayArrow,
-                        enabled = selectedTeam != null,
-                        accent = GreenLime,
-                        gradient = listOf(Color(0xFF1A3A22), Color(0xFF2A6B3A)),
-                        onClick = onNavigateToMatches,
-                        modifier = Modifier.weight(1f).fillMaxHeight()
-                    )
+                    rows.forEach { rowModules ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        ) {
+                            rowModules.forEach { module ->
+                                HomeModuleCard(
+                                    module = module,
+                                    hasTeam = hasTeam,
+                                    lockedHint = lockedHint,
+                                    nextFixture = nextFixture,
+                                    liveMatch = liveMatch,
+                                    onNavigateToTeam = onNavigateToTeam,
+                                    onNavigateToMatches = onNavigateToMatches,
+                                    onNavigateToCalendar = onNavigateToCalendar,
+                                    onNavigateToPizarra = onNavigateToPizarra,
+                                    onNavigateToStatistics = onNavigateToStatistics,
+                                    onNavigateToSettings = onNavigateToSettings,
+                                    onNavigateToLive = onNavigateToLive,
+                                    onNavigateToNextMatch = onNavigateToNextMatch,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                )
+                            }
+                            repeat(3 - rowModules.size) {
+                                Spacer(modifier = Modifier.weight(1f).fillMaxHeight())
+                            }
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.38f),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    SecondaryCard(
-                        title = "ESTADÍSTICAS",
-                        icon = Icons.Default.Info,
-                        accent = TealSoft,
-                        enabled = selectedTeam != null,
-                        lockedLabel = if (selectedTeam == null) "Añade un equipo primero" else null,
-                        onClick = onNavigateToStatistics,
-                        modifier = Modifier.weight(1f).fillMaxHeight()
-                    )
-                    SecondaryCard(
-                        title = "AJUSTES",
-                        icon = Icons.Default.Settings,
-                        accent = AmberAccent,
-                        enabled = selectedTeam != null,
-                        lockedLabel = if (selectedTeam == null) "Añade un equipo primero" else null,
-                        onClick = onNavigateToSettings,
-                        modifier = Modifier.weight(1f).fillMaxHeight()
-                    )
-                }
+@Composable
+private fun HomeModuleCard(
+    module: HomeModule,
+    hasTeam: Boolean,
+    lockedHint: String,
+    nextFixture: FixtureRow?,
+    liveMatch: Match?,
+    onNavigateToTeam: () -> Unit,
+    onNavigateToMatches: () -> Unit,
+    onNavigateToCalendar: () -> Unit,
+    onNavigateToPizarra: () -> Unit,
+    onNavigateToStatistics: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onNavigateToLive: (matchId: Int) -> Unit,
+    onNavigateToNextMatch: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    when (module) {
+        HomeModule.TEAM -> MainCard(
+            title = module.title,
+            icon = Icons.Default.Person,
+            enabled = hasTeam,
+            accent = GreenAccent,
+            gradient = listOf(Color(0xFF143D1F), Color(0xFF1F6B35)),
+            lockedLabel = if (!hasTeam) lockedHint else null,
+            onClick = onNavigateToTeam,
+            modifier = modifier
+        )
+        HomeModule.MATCHES -> MainCard(
+            title = module.title,
+            icon = Icons.Default.PlayArrow,
+            enabled = hasTeam,
+            accent = GreenLime,
+            gradient = listOf(Color(0xFF1A3A22), Color(0xFF2A6B3A)),
+            lockedLabel = if (!hasTeam) lockedHint else null,
+            onClick = onNavigateToMatches,
+            modifier = modifier
+        )
+        HomeModule.CALENDAR -> MainCard(
+            title = module.title,
+            icon = Icons.Default.DateRange,
+            enabled = hasTeam,
+            accent = TealSoft,
+            gradient = listOf(Color(0xFF0F3A2A), Color(0xFF1F6B55)),
+            lockedLabel = if (!hasTeam) lockedHint else null,
+            onClick = onNavigateToCalendar,
+            modifier = modifier
+        )
+        HomeModule.PIZARRA -> MainCard(
+            title = module.title,
+            icon = Icons.Default.Edit,
+            enabled = true,
+            accent = GreenMint,
+            gradient = listOf(Color(0xFF143528), Color(0xFF1F5A3A)),
+            lockedLabel = null,
+            onClick = onNavigateToPizarra,
+            modifier = modifier
+        )
+        HomeModule.STATISTICS -> SecondaryCard(
+            title = module.title,
+            icon = Icons.Default.Info,
+            accent = TealSoft,
+            enabled = hasTeam,
+            subtitle = module.description,
+            lockedLabel = if (!hasTeam) lockedHint else null,
+            onClick = onNavigateToStatistics,
+            modifier = modifier
+        )
+        HomeModule.SETTINGS -> SecondaryCard(
+            title = module.title,
+            icon = Icons.Default.Settings,
+            accent = AmberAccent,
+            enabled = hasTeam,
+            subtitle = module.description,
+            lockedLabel = if (!hasTeam) lockedHint else null,
+            onClick = onNavigateToSettings,
+            modifier = modifier
+        )
+        HomeModule.NEXT_MATCH -> NextMatchCard(
+            fixture = nextFixture,
+            enabled = hasTeam,
+            lockedLabel = if (!hasTeam) lockedHint else null,
+            onClick = onNavigateToNextMatch,
+            modifier = modifier
+        )
+        HomeModule.LIVE_MATCH -> {
+            val match = liveMatch
+            if (match != null) {
+                LiveMatchCard(
+                    match = match,
+                    onClick = { onNavigateToLive(match.id) },
+                    modifier = modifier
+                )
             }
         }
     }
@@ -192,7 +301,6 @@ private fun TeamSelectorBar(
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Botón "+" para añadir equipo
         IconButton(
             onClick = onAddTeam,
             modifier = Modifier.size(40.dp)
@@ -207,7 +315,6 @@ private fun TeamSelectorBar(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        // Selector de equipo activo
         Box {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -315,7 +422,9 @@ fun TeamAvatar(team: Team?, size: Int) {
                     context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
                         BitmapFactory.decodeStream(stream)?.asImageBitmap()
                     }
-                } catch (e: Exception) { null }
+                } catch (e: Exception) {
+                    null
+                }
             }
         } else {
             bitmap = null
@@ -343,7 +452,7 @@ fun TeamAvatar(team: Team?, size: Int) {
             Text(
                 text = (team?.name ?: "?").take(2).uppercase(),
                 style = if (size >= 40) MaterialTheme.typography.labelLarge
-                        else MaterialTheme.typography.labelSmall,
+                else MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimary
             )
@@ -358,6 +467,7 @@ private fun MainCard(
     enabled: Boolean,
     accent: Color,
     gradient: List<Color>,
+    lockedLabel: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -415,7 +525,7 @@ private fun MainCard(
                     letterSpacing = 2.sp
                 )
 
-                if (!enabled) {
+                if (lockedLabel != null) {
                     Spacer(modifier = Modifier.height(10.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -428,8 +538,7 @@ private fun MainCard(
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = if (title == "EQUIPO") "Añade un equipo primero"
-                                   else "Próximamente",
+                            text = lockedLabel,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -446,6 +555,7 @@ private fun SecondaryCard(
     icon: ImageVector,
     accent: Color,
     enabled: Boolean,
+    subtitle: String,
     lockedLabel: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -516,12 +626,165 @@ private fun SecondaryCard(
                         }
                     } else {
                         Text(
-                            text = "Goles, asistencias, tarjetas…",
+                            text = subtitle,
                             style = MaterialTheme.typography.labelSmall,
                             color = accent.copy(alpha = 0.9f)
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NextMatchCard(
+    fixture: FixtureRow?,
+    enabled: Boolean,
+    lockedLabel: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = GreenMint
+    val rival = fixture?.club?.let { club ->
+        club.displayShort.ifBlank { club.name }
+    }.orEmpty().ifBlank { "Sin rival" }
+    val venue = when {
+        fixture == null -> "Sin próximos partidos"
+        fixture.fixture.isHome -> "Local"
+        else -> "Visitante"
+    }
+    val whenLabel = buildString {
+        append("J${fixture?.fixture?.matchday ?: "—"}")
+        val date = fixture?.fixture?.date.orEmpty()
+        val time = fixture?.fixture?.time.orEmpty()
+        if (date.isNotBlank()) append(" · $date")
+        if (time.isNotBlank()) append(" $time")
+    }
+    val canClick = enabled && fixture != null
+
+    Card(
+        modifier = modifier
+            .then(if (canClick) Modifier.clickable(onClick = onClick) else Modifier)
+            .alpha(if (enabled) 1f else 0.45f),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = if (enabled) 0.55f else 0.2f)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF123528), Color(0xFF1F5A45)))
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "PRÓXIMO PARTIDO",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = accent,
+                    letterSpacing = 1.5.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                if (lockedLabel != null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            lockedLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else if (fixture == null) {
+                    Text(
+                        "Sin próximos partidos",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White.copy(alpha = 0.75f)
+                    )
+                } else {
+                    Text(
+                        rival,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "$venue · $whenLabel",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LiveMatchCard(
+    match: Match,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val accent = Color(0xFFFF7043)
+    Card(
+        modifier = modifier.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.75f)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF3D2414), Color(0xFF5A3020)))
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "EN VIVO",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = accent,
+                    letterSpacing = 2.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = match.rival.ifBlank { "Partido en curso" },
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                val score = when {
+                    match.homeScore != null && match.awayScore != null ->
+                        "${match.homeScore} — ${match.awayScore}"
+                    else -> "Continuar partido"
+                }
+                Text(
+                    text = score,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.85f)
+                )
             }
         }
     }

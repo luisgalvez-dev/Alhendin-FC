@@ -19,5 +19,7 @@ data class MatchEntity(
     val notes: String = "",
     val status: String = "OPEN",
     val homeScore: Int? = null,
-    val awayScore: Int? = null
+    val awayScore: Int? = null,
+    val opponentClubId: Int? = null,
+    val rivalShieldUri: String? = null
 )

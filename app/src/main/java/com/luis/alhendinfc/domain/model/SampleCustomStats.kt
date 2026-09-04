@@ -2,7 +2,7 @@ package com.luis.alhendinfc.domain.model
 
 /**
  * Tipos de evento de prueba por equipo.
- * Incluye estadísticas de campo y específicas de portero.
+ * Incluye campo, portero y rival.
  */
 object SampleCustomStats {
 
@@ -62,6 +62,46 @@ object SampleCustomStats {
             shortLabel = "Bloqueo",
             appliesTo = CustomStatAppliesTo.GOALKEEPER,
             sortOrder = 6
+        ),
+        CustomStatType(
+            teamId = teamId,
+            code = "SAMPLE_RIVAL_WING",
+            label = "Ataque por banda",
+            shortLabel = "Banda",
+            appliesTo = CustomStatAppliesTo.RIVAL,
+            sortOrder = 10
+        ),
+        CustomStatType(
+            teamId = teamId,
+            code = "SAMPLE_RIVAL_PRESS",
+            label = "Presión alta",
+            shortLabel = "Presión",
+            appliesTo = CustomStatAppliesTo.RIVAL,
+            sortOrder = 11
+        ),
+        CustomStatType(
+            teamId = teamId,
+            code = "SAMPLE_RIVAL_STEAL",
+            label = "Robo / recuperación",
+            shortLabel = "Robo",
+            appliesTo = CustomStatAppliesTo.RIVAL,
+            sortOrder = 12
+        ),
+        CustomStatType(
+            teamId = teamId,
+            code = "SAMPLE_RIVAL_COUNTER",
+            label = "Contraataque",
+            shortLabel = "Contra",
+            appliesTo = CustomStatAppliesTo.RIVAL,
+            sortOrder = 13
+        ),
+        CustomStatType(
+            teamId = teamId,
+            code = "SAMPLE_RIVAL_SET_PIECE",
+            label = "Balón parado peligroso",
+            shortLabel = "B.parado",
+            appliesTo = CustomStatAppliesTo.RIVAL,
+            sortOrder = 14
         )
     )
 }

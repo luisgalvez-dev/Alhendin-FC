@@ -10,6 +10,7 @@ import com.luis.alhendinfc.domain.repository.CustomStatTypeRepository
 import com.luis.alhendinfc.domain.repository.CustomStatTypeRepositoryImpl
 import com.luis.alhendinfc.domain.repository.PlayerRepository
 import com.luis.alhendinfc.domain.repository.PlayerRepositoryImpl
+import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
 import com.luis.alhendinfc.domain.repository.TeamRepository
 import com.luis.alhendinfc.domain.repository.TeamRepositoryImpl
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,7 +21,8 @@ import kotlinx.coroutines.launch
 class TeamViewModel(
     private val repository: TeamRepository,
     private val playerRepository: PlayerRepository,
-    private val customStatRepository: CustomStatTypeRepository
+    private val customStatRepository: CustomStatTypeRepository,
+    private val calendarRepository: SeasonCalendarRepository
 ) : ViewModel() {
 
     val teams: StateFlow<List<Team>> = repository.getAllTeams()
@@ -42,6 +44,7 @@ class TeamViewModel(
             val teamId = repository.addTeam(team)
             playerRepository.ensureSampleSquad(teamId)
             customStatRepository.ensureSampleCustomStats(teamId)
+            calendarRepository.ensureSampleCalendar(teamId)
         }
     }
 
@@ -62,6 +65,7 @@ class TeamViewModel(
             val teamId = selectedTeam.value?.id ?: return@launch
             playerRepository.ensureSampleSquad(teamId)
             customStatRepository.ensureSampleCustomStats(teamId)
+            calendarRepository.ensureSampleCalendar(teamId)
         }
     }
 
@@ -71,6 +75,7 @@ class TeamViewModel(
                 val id = team?.id ?: return@collect
                 playerRepository.ensureSampleSquad(id)
                 customStatRepository.ensureSampleCustomStats(id)
+                calendarRepository.ensureSampleCalendar(id)
             }
         }
     }
@@ -84,7 +89,8 @@ class TeamViewModel(
                     return TeamViewModel(
                         TeamRepositoryImpl(db.teamDao()),
                         PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
-                        CustomStatTypeRepositoryImpl(db.customStatTypeDao())
+                        CustomStatTypeRepositoryImpl(db.customStatTypeDao()),
+                        SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao())
                     ) as T
                 }
             }

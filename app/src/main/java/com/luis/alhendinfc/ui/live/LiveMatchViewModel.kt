@@ -362,7 +362,7 @@ class LiveMatchViewModel(
                 teamPlayers.value.firstOrNull { it.id == id }?.let { p ->
                     p.alias.ifBlank { p.name.split(" ").first() }
                 }
-            } ?: "—"
+            } ?: (match.value?.rival?.ifBlank { null } ?: "Rival")
             _ui.update {
                 it.copy(lastFeedback = "${currentMinute()}' · $label · $name")
             }

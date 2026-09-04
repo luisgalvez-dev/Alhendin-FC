@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,11 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,6 +65,7 @@ fun SettingsScreen(
     onUpdate: (CustomStatType, label: String, shortLabel: String, appliesTo: CustomStatAppliesTo) -> Unit,
     onToggleActive: (CustomStatType, Boolean) -> Unit,
     onDelete: (CustomStatType) -> Unit,
+    onCustomizeHome: () -> Unit,
     onBack: () -> Unit
 ) {
     var editing by remember { mutableStateOf<CustomStatType?>(null) }
@@ -163,6 +168,43 @@ fun SettingsScreen(
                 .padding(padding)
                 .padding(20.dp)
         ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2A1E)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onCustomizeHome)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Home,
+                        contentDescription = null,
+                        tint = GreenAccent,
+                        modifier = Modifier.padding(end = 2.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Personalizar inicio",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            "Atajos del Home: mostrar, ocultar y ordenar",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GreenMint
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             Text(
                 "Tipos de evento",
                 style = MaterialTheme.typography.titleLarge,
@@ -170,7 +212,7 @@ fun SettingsScreen(
                 color = Color.White
             )
             Text(
-                "Aparecerán en el menú del jugador en el partido. Puedes crear tipos solo para porteros (parada, etc.).",
+                "Aparecerán en el menú del jugador o del rival en el partido. Puedes crear tipos solo para porteros o solo para el rival.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
@@ -178,7 +220,7 @@ fun SettingsScreen(
 
             if (types.isEmpty()) {
                 Text(
-                    "Aún no hay tipos personalizados. Pulsa + (ej. Parada para porteros, Tiro a puerta…).",
+                    "Aún no hay tipos. Pulsa + (ej. Parada para porteros, Ataque por banda para rival…).",
                     color = AmberAccent
                 )
             } else {
@@ -276,7 +318,11 @@ private fun StatTypeEditorDialog(
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("Aplicable a", fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     CustomStatAppliesTo.entries.forEach { option ->
                         FilterChip(
                             selected = appliesTo == option,

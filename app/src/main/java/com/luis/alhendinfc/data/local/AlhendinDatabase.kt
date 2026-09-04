@@ -12,9 +12,11 @@ import androidx.room.RoomDatabase
         MatchEntity::class,
         MatchPlayerEntity::class,
         MatchEventEntity::class,
-        CustomStatTypeEntity::class
+        CustomStatTypeEntity::class,
+        OpponentClubEntity::class,
+        SeasonFixtureEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AlhendinDatabase : RoomDatabase() {
@@ -24,6 +26,8 @@ abstract class AlhendinDatabase : RoomDatabase() {
     abstract fun matchDao(): MatchDao
     abstract fun matchEventDao(): MatchEventDao
     abstract fun customStatTypeDao(): CustomStatTypeDao
+    abstract fun opponentClubDao(): OpponentClubDao
+    abstract fun seasonFixtureDao(): SeasonFixtureDao
 
     companion object {
         @Volatile

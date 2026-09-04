@@ -79,6 +79,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luis.alhendinfc.domain.model.CallupStatus
+import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Formation
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchPlayer
@@ -90,6 +91,7 @@ import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.theme.GreenPitch
+import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
@@ -100,6 +102,7 @@ fun MatchSetupScreen(
     matchPlayers: List<MatchPlayer>,
     teamPlayers: List<Player>,
     team: Team?,
+    fixtures: List<FixtureRow> = emptyList(),
     onSave: (Match) -> Unit,
     onPlayerCallup: (playerId: Int, status: CallupStatus) -> Unit,
     onDelete: () -> Unit,
@@ -122,12 +125,33 @@ fun MatchSetupScreen(
         mutableStateOf(match.formation.ifBlank { Formation.F_4_3_3.label })
     }
     var notes by rememberSaveable(match.id) { mutableStateOf(match.notes) }
+    var opponentClubId by remember(match.id) { mutableStateOf(match.opponentClubId) }
+    var rivalShieldUri by remember(match.id) { mutableStateOf(match.rivalShieldUri) }
 
     var activeMode by remember { mutableStateOf(CallupStatus.TITULAR) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var formationExpanded by remember { mutableStateOf(false) }
+    var lastAutoFilledMatchday by rememberSaveable(match.id) {
+        mutableStateOf(if (match.rival.isNotBlank()) match.matchday else -1)
+    }
+
+    // Auto-rellenar desde calendario al cambiar jornada (si hay fixture)
+    LaunchedEffect(matchday, fixtures) {
+        val day = matchday.toIntOrNull() ?: return@LaunchedEffect
+        if (day == lastAutoFilledMatchday) return@LaunchedEffect
+        val row = fixtures.firstOrNull { it.fixture.matchday == day } ?: return@LaunchedEffect
+        val club = row.club
+        rival = club?.name.orEmpty()
+        stadium = row.stadium
+        date = row.fixture.date
+        time = row.fixture.time.ifBlank { time }
+        isHome = row.fixture.isHome
+        opponentClubId = club?.id
+        rivalShieldUri = club?.shieldUri
+        lastAutoFilledMatchday = day
+    }
 
     // Map playerId → callup status for quick lookup
     val callupMap: Map<Int, CallupStatus> = remember(matchPlayers) {
@@ -149,7 +173,9 @@ fun MatchSetupScreen(
         durationPerPart = durationPerPart.toIntOrNull() ?: 45,
         numParts = numParts.toIntOrNull() ?: 2,
         formation = formation,
-        notes = notes
+        notes = notes,
+        opponentClubId = opponentClubId,
+        rivalShieldUri = rivalShieldUri
     )
 
     if (showDeleteDialog) {

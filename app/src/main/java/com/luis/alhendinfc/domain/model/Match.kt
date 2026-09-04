@@ -15,5 +15,7 @@ data class Match(
     val notes: String = "",
     val status: MatchStatus = MatchStatus.OPEN,
     val homeScore: Int? = null,
-    val awayScore: Int? = null
+    val awayScore: Int? = null,
+    val opponentClubId: Int? = null,
+    val rivalShieldUri: String? = null
 )

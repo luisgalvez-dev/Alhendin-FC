@@ -6,12 +6,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.local.AlhendinDatabase
 import com.luis.alhendinfc.domain.model.CallupStatus
+import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchPlayer
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.PlayerRepositoryImpl
+import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 class MatchViewModel(
     private val matchRepository: MatchRepositoryImpl,
     private val playerRepository: PlayerRepositoryImpl,
+    private val calendarRepository: SeasonCalendarRepository,
     private val teamId: Int
 ) : ViewModel() {
 
@@ -34,11 +37,15 @@ class MatchViewModel(
     val teamPlayers: StateFlow<List<Player>> = playerRepository.getPlayersByTeam(teamId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val fixtures: StateFlow<List<FixtureRow>> = calendarRepository.getFixtureRows(teamId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _activeMatchId = MutableStateFlow<Int?>(null)
 
     init {
         viewModelScope.launch {
             playerRepository.ensureSampleSquad(teamId)
+            calendarRepository.ensureSampleCalendar(teamId)
         }
     }
 
@@ -87,6 +94,9 @@ class MatchViewModel(
         }
     }
 
+    fun fixtureForMatchday(matchday: Int): FixtureRow? =
+        fixtures.value.firstOrNull { it.fixture.matchday == matchday }
+
     companion object {
         fun factory(context: Context, teamId: Int) = object : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -95,6 +105,7 @@ class MatchViewModel(
                 return MatchViewModel(
                     MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
                     PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
+                    SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                     teamId
                 ) as T
             }

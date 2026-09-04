@@ -41,8 +41,11 @@ class CustomStatTypeRepositoryImpl(
 
     override suspend fun ensureSampleCustomStats(teamId: Int): Boolean {
         if (teamId <= 0) return false
-        if (dao.countByTeam(teamId) > 0) return false
-        dao.insertAll(SampleCustomStats.createTypes(teamId).map { it.toEntity() })
+        val existing = dao.getCodesByTeam(teamId).toSet()
+        val missing = SampleCustomStats.createTypes(teamId)
+            .filter { it.code !in existing }
+        if (missing.isEmpty()) return false
+        dao.insertAll(missing.map { it.toEntity() })
         return true
     }
 

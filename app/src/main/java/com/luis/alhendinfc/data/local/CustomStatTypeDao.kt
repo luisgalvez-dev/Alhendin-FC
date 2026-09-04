@@ -38,6 +38,9 @@ interface CustomStatTypeDao {
     @Query("SELECT COUNT(*) FROM custom_stat_type WHERE teamId = :teamId")
     suspend fun countByTeam(teamId: Int): Int
 
+    @Query("SELECT code FROM custom_stat_type WHERE teamId = :teamId")
+    suspend fun getCodesByTeam(teamId: Int): List<String>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(entities: List<CustomStatTypeEntity>)
 }
