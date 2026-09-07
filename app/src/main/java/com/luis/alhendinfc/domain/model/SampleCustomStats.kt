@@ -1,8 +1,8 @@
 package com.luis.alhendinfc.domain.model
 
 /**
- * Tipos de evento de prueba por equipo.
- * Incluye campo, portero y rival.
+ * Etiquetas históricas de códigos SAMPLE_* (por si quedan eventos antiguos).
+ * Ya no se insertan automáticamente en la BD.
  */
 object SampleCustomStats {
 
@@ -41,11 +41,19 @@ object SampleCustomStats {
         ),
         CustomStatType(
             teamId = teamId,
+            code = "SAMPLE_STEAL",
+            label = "Robo / recuperación",
+            shortLabel = "Robo",
+            appliesTo = CustomStatAppliesTo.OUTFIELD,
+            sortOrder = 4
+        ),
+        CustomStatType(
+            teamId = teamId,
             code = "SAMPLE_SAVE",
             label = "Parada",
             shortLabel = "Parada",
             appliesTo = CustomStatAppliesTo.GOALKEEPER,
-            sortOrder = 4
+            sortOrder = 5
         ),
         CustomStatType(
             teamId = teamId,
@@ -53,7 +61,7 @@ object SampleCustomStats {
             label = "Salida / despeje",
             shortLabel = "Salida",
             appliesTo = CustomStatAppliesTo.GOALKEEPER,
-            sortOrder = 5
+            sortOrder = 6
         ),
         CustomStatType(
             teamId = teamId,
@@ -61,7 +69,7 @@ object SampleCustomStats {
             label = "Bloqueo",
             shortLabel = "Bloqueo",
             appliesTo = CustomStatAppliesTo.GOALKEEPER,
-            sortOrder = 6
+            sortOrder = 7
         ),
         CustomStatType(
             teamId = teamId,
@@ -82,8 +90,8 @@ object SampleCustomStats {
         CustomStatType(
             teamId = teamId,
             code = "SAMPLE_RIVAL_STEAL",
-            label = "Robo / recuperación",
-            shortLabel = "Robo",
+            label = "Robo / recuperación (rival)",
+            shortLabel = "Robo riv.",
             appliesTo = CustomStatAppliesTo.RIVAL,
             sortOrder = 12
         ),

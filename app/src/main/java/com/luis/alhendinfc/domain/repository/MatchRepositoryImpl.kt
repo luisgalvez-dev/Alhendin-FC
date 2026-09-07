@@ -106,7 +106,13 @@ class MatchRepositoryImpl(
         homeScore = homeScore,
         awayScore = awayScore,
         opponentClubId = opponentClubId,
-        rivalShieldUri = rivalShieldUri
+        rivalShieldUri = rivalShieldUri,
+        livePeriod = livePeriod,
+        liveElapsedSeconds = liveElapsedSeconds,
+        liveClockRunning = liveClockRunning,
+        liveClockAnchorWallMs = liveClockAnchorWallMs,
+        fieldSecondsJson = fieldSecondsJson,
+        fieldPositionsJson = fieldPositionsJson
     )
 
     private fun Match.toEntity() = MatchEntity(
@@ -126,7 +132,13 @@ class MatchRepositoryImpl(
         homeScore = homeScore,
         awayScore = awayScore,
         opponentClubId = opponentClubId,
-        rivalShieldUri = rivalShieldUri
+        rivalShieldUri = rivalShieldUri,
+        livePeriod = livePeriod,
+        liveElapsedSeconds = liveElapsedSeconds,
+        liveClockRunning = liveClockRunning,
+        liveClockAnchorWallMs = liveClockAnchorWallMs,
+        fieldSecondsJson = fieldSecondsJson,
+        fieldPositionsJson = fieldPositionsJson
     )
 
     private fun MatchPlayerEntity.toDomain() = MatchPlayer(

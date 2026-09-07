@@ -2,4 +2,16 @@
 <resources>
 
     <style name="Theme.AlhendinFC" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Android 12+ obliga un splash del sistema (fondo + icono circular).
+         Fondo negro como splash_carga e icono transparente → transición casi invisible. -->
+    <style name="Theme.AlhendinFC.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_transparent_icon</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_background</item>
+        <item name="postSplashScreenTheme">@style/Theme.AlhendinFC</item>
+        <item name="android:windowBackground">@drawable/splash_window_bg</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+    </style>
 </resources>

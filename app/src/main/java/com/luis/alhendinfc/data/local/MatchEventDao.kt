@@ -17,11 +17,17 @@ interface MatchEventDao {
         """
         SELECT e.* FROM match_event e
         INNER JOIN match_table m ON m.id = e.matchId
-        WHERE m.teamId = :teamId
+        WHERE m.teamId = :teamId AND m.status = 'FINISHED'
         ORDER BY e.createdAt DESC
         """
     )
     fun getEventsByTeam(teamId: Int): Flow<List<MatchEventEntity>>
+
+    @Query("SELECT * FROM match_event ORDER BY id ASC")
+    suspend fun getAllOnce(): List<MatchEventEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(events: List<MatchEventEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(event: MatchEventEntity): Long

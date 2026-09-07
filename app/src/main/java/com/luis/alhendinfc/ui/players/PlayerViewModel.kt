@@ -29,12 +29,6 @@ class PlayerViewModel(
     private val _selectedPlayer = MutableStateFlow<Player?>(null)
     val selectedPlayer: StateFlow<Player?> = _selectedPlayer
 
-    init {
-        viewModelScope.launch {
-            repository.ensureSampleSquad(teamId)
-        }
-    }
-
     fun addPlayer(player: Player) {
         viewModelScope.launch { repository.addPlayer(player) }
     }

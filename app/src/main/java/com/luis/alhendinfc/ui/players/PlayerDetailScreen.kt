@@ -1,12 +1,12 @@
 package com.luis.alhendinfc.ui.players
 
-import android.graphics.BitmapFactory
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
@@ -45,22 +47,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luis.alhendinfc.domain.model.Player
+import com.luis.alhendinfc.domain.model.PlayerCustomStatCount
+import com.luis.alhendinfc.domain.model.PlayerSeasonStats
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.home.TeamAvatar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.luis.alhendinfc.ui.theme.AmberAccent
+import com.luis.alhendinfc.ui.theme.GreenAccent
+import com.luis.alhendinfc.ui.theme.GreenMint
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerDetailScreen(
     player: Player,
     team: Team?,
+    seasonStats: PlayerSeasonStats? = null,
     onEdit: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -68,18 +74,7 @@ fun PlayerDetailScreen(
     var bitmap by remember(player.photoUri) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(player.photoUri) {
-        val uri = player.photoUri
-        if (uri != null) {
-            bitmap = withContext(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
-                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                    }
-                } catch (e: Exception) { null }
-            }
-        } else {
-            bitmap = null
-        }
+        bitmap = LocalImageLoader.load(context, player.photoUri, maxSidePx = 512)
     }
 
     Column(
@@ -287,6 +282,7 @@ fun PlayerDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -297,9 +293,42 @@ fun PlayerDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+                    val stats = seasonStats
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        PlayerStatChip("PJ", (stats?.matchesPlayed ?: 0).toString(), Color.White)
+                        PlayerStatChip("G", (stats?.goals ?: 0).toString(), GreenAccent)
+                        PlayerStatChip("A", (stats?.assists ?: 0).toString(), GreenMint)
+                        PlayerStatChip("TA", (stats?.yellowCards ?: 0).toString(), AmberAccent)
+                        PlayerStatChip("TR", (stats?.redCards ?: 0).toString(), Color(0xFFFF5252))
+                    }
+
+                    val custom = stats?.customStats.orEmpty()
+                    if (custom.isNotEmpty()) {
+                        Text(
+                            text = "PERSONALIZADAS",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+                        PlayerCustomStatsGrid(custom)
+                    }
+
+                    val hasAny = stats != null &&
+                        (stats.matchesPlayed > 0 || stats.goals > 0 || stats.assists > 0 ||
+                            stats.yellowCards > 0 || stats.redCards > 0 ||
+                            stats.customStats.any { it.value > 0 })
                     Text(
-                        text = "Las estadísticas estarán disponibles cuando añadas partidos.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = if (hasAny) {
+                            "Acumulado de partidos finalizados. Las personalizadas vienen de Ajustes."
+                        } else {
+                            "Sin datos aún. Registra eventos en vivo y finaliza el partido."
+                        },
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
@@ -323,6 +352,44 @@ fun PlayerDetailScreen(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlayerCustomStatsGrid(custom: List<PlayerCustomStatCount>) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        maxItemsInEachRow = 3
+    ) {
+        custom.forEach { stat ->
+            PlayerStatChip(
+                label = stat.shortLabel,
+                value = stat.value.toString(),
+                valueColor = GreenMint
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlayerStatChip(label: String, value: String, valueColor: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = valueColor
+        )
     }
 }
 

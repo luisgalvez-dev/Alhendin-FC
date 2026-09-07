@@ -9,6 +9,7 @@ import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.OpponentClub
+import com.luis.alhendinfc.domain.model.SeasonFixture
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,13 +35,13 @@ class CalendarViewModel(
         matchRepository.getMatchesByTeam(teamId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    init {
-        viewModelScope.launch {
-            calendarRepository.ensureSampleCalendar(teamId)
-        }
-    }
-
-    fun addClub(name: String, shortName: String, stadium: String, shieldUri: String?) {
+    fun addClub(
+        name: String,
+        shortName: String,
+        stadium: String,
+        shieldUri: String?,
+        kitColors: String = ""
+    ) {
         if (name.isBlank()) return
         viewModelScope.launch {
             val order = (clubs.value.maxOfOrNull { it.sortOrder } ?: -1) + 1
@@ -50,7 +51,12 @@ class CalendarViewModel(
                     name = name.trim(),
                     shortName = shortName.trim(),
                     stadium = stadium.trim(),
-                    shieldUri = shieldUri?.trim()?.ifBlank { null },
+                    shieldUri = shieldUri?.trim()?.takeIf { uri ->
+                        val lower = uri.lowercase()
+                        !lower.startsWith("http://") && !lower.startsWith("https://") &&
+                            (lower.startsWith("content://") || lower.startsWith("file://"))
+                    },
+                    kitColors = kitColors.trim(),
                     sortOrder = order
                 )
             )
@@ -63,6 +69,65 @@ class CalendarViewModel(
 
     fun deleteClub(club: OpponentClub) {
         viewModelScope.launch { calendarRepository.deleteClub(club) }
+    }
+
+    fun saveFixture(
+        existingId: Int,
+        matchday: Int,
+        opponentClubId: Int,
+        isHome: Boolean,
+        date: String,
+        time: String,
+        stadiumOverride: String
+    ) {
+        if (opponentClubId <= 0 || matchday <= 0) return
+        viewModelScope.launch {
+            calendarRepository.upsertFixture(
+                SeasonFixture(
+                    id = existingId,
+                    teamId = teamId,
+                    matchday = matchday,
+                    opponentClubId = opponentClubId,
+                    isHome = isHome,
+                    date = date.trim(),
+                    time = time.trim(),
+                    stadiumOverride = stadiumOverride.trim()
+                )
+            )
+        }
+    }
+
+    fun addFixture(
+        matchday: Int,
+        opponentClubId: Int,
+        isHome: Boolean,
+        date: String,
+        time: String,
+        stadiumOverride: String
+    ) {
+        if (opponentClubId <= 0) return
+        val day = if (matchday > 0) {
+            matchday
+        } else {
+            (fixtures.value.maxOfOrNull { it.fixture.matchday } ?: 0) + 1
+        }
+        viewModelScope.launch {
+            calendarRepository.upsertFixture(
+                SeasonFixture(
+                    teamId = teamId,
+                    matchday = day,
+                    opponentClubId = opponentClubId,
+                    isHome = isHome,
+                    date = date.trim(),
+                    time = time.trim(),
+                    stadiumOverride = stadiumOverride.trim()
+                )
+            )
+        }
+    }
+
+    fun deleteFixture(row: FixtureRow) {
+        viewModelScope.launch { calendarRepository.deleteFixture(row.fixture) }
     }
 
     /**

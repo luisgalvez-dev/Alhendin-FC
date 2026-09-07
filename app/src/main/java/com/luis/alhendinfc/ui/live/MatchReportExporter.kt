@@ -7,6 +7,7 @@ import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
 import com.luis.alhendinfc.domain.model.Player
@@ -19,12 +20,11 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Exporta el acta del partido en PDF y CSV (texto tabular compatible con Excel),
- * pensado para compartir o pegar en una IA.
+ * Exporta el acta del partido en PDF, pensado para compartir o analizar con IA.
  */
 class MatchReportExporter(private val context: Context) {
 
-    data class Result(val pdfUri: Uri?, val csvUri: Uri?)
+    data class Result(val pdfUri: Uri?)
 
     fun exportAll(
         match: Match,
@@ -57,20 +57,7 @@ class MatchReportExporter(private val context: Context) {
             secondsOnField = secondsOnField,
             eventLabel = eventLabel
         )
-        val csv = exportCsv(
-            fileName = "$base.csv",
-            match = match,
-            team = team,
-            events = events,
-            players = players,
-            teamGoals = teamGoals,
-            rivalGoals = rivalGoals,
-            period = period,
-            elapsedSeconds = elapsedSeconds,
-            secondsOnField = secondsOnField,
-            eventLabel = eventLabel
-        )
-        return Result(pdfUri = pdf, csvUri = csv)
+        return Result(pdfUri = pdf)
     }
 
     fun exportPdf(
@@ -81,8 +68,8 @@ class MatchReportExporter(private val context: Context) {
         players: List<Player>,
         teamGoals: Int,
         rivalGoals: Int,
-        period: Int,
-        elapsedSeconds: Int,
+        @Suppress("UNUSED_PARAMETER") period: Int,
+        @Suppress("UNUSED_PARAMETER") elapsedSeconds: Int,
         secondsOnField: Map<Int, Int>,
         eventLabel: (MatchEvent) -> String
     ): Uri? {
@@ -137,16 +124,12 @@ class MatchReportExporter(private val context: Context) {
         canvas.drawLine(MARGIN, y, PAGE_WIDTH - MARGIN, y, linePaint)
         y += 14f
 
-        val mm = elapsedSeconds / 60
-        val ss = elapsedSeconds % 60
         val meta = listOf(
             "Fecha: ${match.date.ifBlank { "—" }}  Hora: ${match.time.ifBlank { "—" }}",
             "Jornada: ${if (match.matchday > 0) match.matchday else "—"}  " +
                 "Estadio: ${match.stadium.ifBlank { "—" }}",
             "Formación: ${match.formation.ifBlank { "—" }}  " +
-                "Condición: ${if (match.isHome) "Local" else "Visitante"}",
-            "Parte: $period/${match.numParts}  Cronómetro: %d'%02d".format(mm, ss),
-            "Estado: ${match.status.name}"
+                "Condición: ${if (match.isHome) "Local" else "Visitante"}"
         )
         meta.forEach {
             canvas.drawText(it, MARGIN, y + 12f, mutedPaint)
@@ -154,11 +137,16 @@ class MatchReportExporter(private val context: Context) {
         }
         y += 8f
 
+        val labelOf: (MatchEvent) -> String = { e ->
+            val raw = eventLabel(e)
+            if (raw.startsWith("SAMPLE_") || raw == e.typeCode) EventLabels.resolve(e) else raw
+        }
+
         // Resumen por tipo
         ensureSpace(80f)
         canvas.drawText("RESUMEN DE EVENTOS", MARGIN, y + 12f, sectionPaint)
         y += 20f
-        val counts = events.groupingBy { eventLabel(it) }.eachCount().toList()
+        val counts = events.groupingBy { labelOf(it) }.eachCount().toList()
             .sortedByDescending { it.second }
         if (counts.isEmpty()) {
             canvas.drawText("Sin eventos registrados.", MARGIN, y + 12f, bodyPaint)
@@ -172,18 +160,9 @@ class MatchReportExporter(private val context: Context) {
         }
         y += 10f
 
-        // Timeline
+        // Timeline agrupada por parte
         ensureSpace(40f)
         canvas.drawText("CRONOLOGÍA", MARGIN, y + 12f, sectionPaint)
-        y += 18f
-        val headerBg = Paint().apply { color = GREEN; style = Paint.Style.FILL }
-        canvas.drawRect(RectF(MARGIN, y, PAGE_WIDTH - MARGIN, y + 18f), headerBg)
-        val headerText = Paint().apply {
-            color = WHITE; textSize = 9f; isFakeBoldText = true; isAntiAlias = true
-        }
-        canvas.drawText("MIN", MARGIN + 4f, y + 13f, headerText)
-        canvas.drawText("EVENTO", MARGIN + 40f, y + 13f, headerText)
-        canvas.drawText("DETALLE", MARGIN + 200f, y + 13f, headerText)
         y += 18f
 
         fun playerName(id: Int?): String {
@@ -192,25 +171,52 @@ class MatchReportExporter(private val context: Context) {
             return p.alias.ifBlank { p.name }
         }
 
-        events.forEachIndexed { idx, e ->
-            ensureSpace(20f)
-            val rowBg = if (idx % 2 == 0) WHITE else 0xFFFAFAFA.toInt()
-            canvas.drawRect(
-                RectF(MARGIN, y, PAGE_WIDTH - MARGIN, y + 18f),
-                Paint().apply { color = rowBg; style = Paint.Style.FILL }
-            )
-            val detail = when (e.type) {
-                StatisticType.SUBSTITUTION ->
-                    "${playerName(e.playerId)} → ${playerName(e.relatedPlayerId)}"
-                StatisticType.RIVAL_GOAL -> rival
-                else -> if (e.playerId == null) rival else playerName(e.playerId)
-            }
-            canvas.drawText("${e.minute}'", MARGIN + 4f, y + 13f, bodyPaint)
-            canvas.drawText(eventLabel(e).take(28), MARGIN + 40f, y + 13f, bodyPaint)
-            canvas.drawText(detail.take(36), MARGIN + 200f, y + 13f, mutedPaint)
-            y += 18f
+        val headerBg = Paint().apply { color = GREEN; style = Paint.Style.FILL }
+        val headerText = Paint().apply {
+            color = WHITE; textSize = 9f; isFakeBoldText = true; isAntiAlias = true
         }
-        y += 12f
+        val periodHeaderPaint = Paint().apply {
+            color = DARK; textSize = 11f; isFakeBoldText = true; isAntiAlias = true
+        }
+        val partDuration = match.durationPerPart.coerceAtLeast(1)
+
+        if (events.isEmpty()) {
+            canvas.drawText("Sin eventos registrados.", MARGIN, y + 12f, bodyPaint)
+            y += 20f
+        } else {
+            events.groupBy { it.period }.toSortedMap().forEach { (part, partEvents) ->
+                ensureSpace(44f)
+                canvas.drawText("${part}ª PARTE", MARGIN, y + 12f, periodHeaderPaint)
+                y += 16f
+                canvas.drawRect(RectF(MARGIN, y, PAGE_WIDTH - MARGIN, y + 18f), headerBg)
+                canvas.drawText("MIN", MARGIN + 4f, y + 13f, headerText)
+                canvas.drawText("EVENTO", MARGIN + 40f, y + 13f, headerText)
+                canvas.drawText("DETALLE", MARGIN + 200f, y + 13f, headerText)
+                y += 18f
+
+                partEvents.forEachIndexed { idx, e ->
+                    ensureSpace(20f)
+                    val rowBg = if (idx % 2 == 0) WHITE else 0xFFFAFAFA.toInt()
+                    canvas.drawRect(
+                        RectF(MARGIN, y, PAGE_WIDTH - MARGIN, y + 18f),
+                        Paint().apply { color = rowBg; style = Paint.Style.FILL }
+                    )
+                    val detail = when (e.type) {
+                        StatisticType.SUBSTITUTION ->
+                            "${playerName(e.playerId)} → ${playerName(e.relatedPlayerId)}"
+                        StatisticType.RIVAL_GOAL -> rival
+                        else -> if (e.playerId == null) rival else playerName(e.playerId)
+                    }
+                    val minute = EventLabels.displayMinute(e, partDuration)
+                    canvas.drawText("$minute'", MARGIN + 4f, y + 13f, bodyPaint)
+                    canvas.drawText(labelOf(e).take(28), MARGIN + 40f, y + 13f, bodyPaint)
+                    canvas.drawText(detail.take(36), MARGIN + 200f, y + 13f, mutedPaint)
+                    y += 18f
+                }
+                y += 8f
+            }
+        }
+        y += 4f
 
         // Minutos en campo
         ensureSpace(40f)

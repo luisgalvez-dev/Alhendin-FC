@@ -1,13 +1,15 @@
 package com.luis.alhendinfc.navigation
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -76,8 +78,8 @@ fun AlhendinNavGraph(navController: NavHostController) {
     val teamViewModel: TeamViewModel = viewModel(
         factory = TeamViewModel.factory(context.applicationContext)
     )
-    val teams by teamViewModel.teams.collectAsState()
-    val selectedTeam by teamViewModel.selectedTeam.collectAsState()
+    val teams by teamViewModel.teams.collectAsStateWithLifecycle()
+    val selectedTeam by teamViewModel.selectedTeam.collectAsStateWithLifecycle()
 
     NavHost(
         navController = navController,
@@ -90,9 +92,9 @@ fun AlhendinNavGraph(navController: NavHostController) {
             LaunchedEffect(selectedTeam?.id) {
                 homeVm.setTeamId(selectedTeam?.id)
             }
-            val layoutConfig by homeVm.layoutConfig.collectAsState()
-            val nextFixture by homeVm.nextFixture.collectAsState()
-            val liveMatch by homeVm.liveMatch.collectAsState()
+            val layoutConfig by homeVm.layoutConfig.collectAsStateWithLifecycle()
+            val nextFixture by homeVm.nextFixture.collectAsStateWithLifecycle()
+            val liveMatch by homeVm.liveMatch.collectAsStateWithLifecycle()
 
             HomeScreen(
                 teams = teams,
@@ -139,7 +141,7 @@ fun AlhendinNavGraph(navController: NavHostController) {
                 key = "team_players_$teamId",
                 factory = PlayerViewModel.factory(context.applicationContext, teamId)
             )
-            val players by playerViewModel.players.collectAsState()
+            val players by playerViewModel.players.collectAsStateWithLifecycle()
 
             TeamScreen(
                 team = selectedTeam,
@@ -281,9 +283,18 @@ private fun PlayersRoute(
         factory = TeamViewModel.factory(context.applicationContext)
     )
 
-    val players by playerViewModel.players.collectAsState()
-    val selectedTeam by teamViewModel.selectedTeam.collectAsState()
-    val selectedPlayer by playerViewModel.selectedPlayer.collectAsState()
+    val players by playerViewModel.players.collectAsStateWithLifecycle()
+    val selectedTeam by teamViewModel.selectedTeam.collectAsStateWithLifecycle()
+    val selectedPlayer by playerViewModel.selectedPlayer.collectAsStateWithLifecycle()
+
+    val statsVm: StatisticsViewModel = viewModel(
+        key = "stats_$teamId",
+        factory = StatisticsViewModel.factory(context.applicationContext, teamId)
+    )
+    val teamStats by statsVm.playerStats.collectAsStateWithLifecycle()
+    val selectedStats = remember(selectedPlayer, teamStats) {
+        selectedPlayer?.let { p -> teamStats.find { it.player.id == p.id } }
+    }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var editingPlayer by remember { mutableStateOf<Player?>(null) }
@@ -313,6 +324,7 @@ private fun PlayersRoute(
         PlayerDetailScreen(
             player = selectedPlayer!!,
             team = selectedTeam,
+            seasonStats = selectedStats,
             onEdit = { editingPlayer = selectedPlayer },
             onBack = { playerViewModel.selectPlayer(null) }
         )
@@ -341,11 +353,12 @@ private fun MatchesRoute(
         factory = MatchViewModel.factory(context.applicationContext, teamId)
     )
 
-    val matches by matchViewModel.matches.collectAsState()
-    val currentMatch by matchViewModel.currentMatch.collectAsState()
-    val matchPlayers by matchViewModel.matchPlayers.collectAsState()
-    val teamPlayers by matchViewModel.teamPlayers.collectAsState()
-    val fixtures by matchViewModel.fixtures.collectAsState()
+    val matches by matchViewModel.matches.collectAsStateWithLifecycle()
+    val currentMatch by matchViewModel.currentMatch.collectAsStateWithLifecycle()
+    val matchPlayers by matchViewModel.matchPlayers.collectAsStateWithLifecycle()
+    val teamPlayers by matchViewModel.teamPlayers.collectAsStateWithLifecycle()
+    val fixtures by matchViewModel.fixtures.collectAsStateWithLifecycle()
+    val matchEvents by matchViewModel.matchEvents.collectAsStateWithLifecycle()
 
     LaunchedEffect(openMatchId) {
         if (openMatchId > 0) {
@@ -361,6 +374,8 @@ private fun MatchesRoute(
                 teamPlayers = teamPlayers,
                 team = team,
                 fixtures = fixtures,
+                matchEvents = matchEvents,
+                eventLabel = matchViewModel::eventLabel,
                 onSave = { matchViewModel.saveMatch(it) },
                 onPlayerCallup = { playerId, status -> matchViewModel.setPlayerCallup(playerId, status) },
                 onDelete = { matchViewModel.deleteCurrentMatch() },
@@ -406,9 +421,9 @@ private fun CalendarRoute(
         key = "calendar_$teamId",
         factory = CalendarViewModel.factory(context.applicationContext, teamId)
     )
-    val fixtures by vm.fixtures.collectAsState()
-    val clubs by vm.clubs.collectAsState()
-    val matches by vm.matches.collectAsState()
+    val fixtures by vm.fixtures.collectAsStateWithLifecycle()
+    val clubs by vm.clubs.collectAsStateWithLifecycle()
+    val matches by vm.matches.collectAsStateWithLifecycle()
 
     CalendarScreen(
         team = team,
@@ -420,6 +435,9 @@ private fun CalendarRoute(
                 onOpenMatch(matchId)
             }
         },
+        onSaveFixture = vm::saveFixture,
+        onAddFixture = vm::addFixture,
+        onDeleteFixture = vm::deleteFixture,
         onAddClub = vm::addClub,
         onUpdateClub = vm::updateClub,
         onDeleteClub = vm::deleteClub,
@@ -433,7 +451,7 @@ private fun PizarraRoute(onBack: () -> Unit) {
     val vm: PizarraViewModel = viewModel(
         factory = PizarraViewModel.factory(context.applicationContext)
     )
-    val state by vm.uiState.collectAsState()
+    val state by vm.uiState.collectAsStateWithLifecycle()
 
     PizarraScreen(
         state = state,
@@ -445,6 +463,8 @@ private fun PizarraRoute(onBack: () -> Unit) {
         onImagePicked = vm::setImage,
         onVideoPicked = vm::setVideo,
         onTogglePlay = { vm.setVideoPlaying(!state.isVideoPlaying) },
+        onSeekBack = { vm.seekVideo(-10_000L) },
+        onSeekForward = { vm.seekVideo(10_000L) },
         onStartStroke = vm::startStroke,
         onUpdateStroke = vm::updateStroke,
         onFinishStroke = vm::finishStroke,
@@ -467,12 +487,13 @@ private fun LiveMatchRoute(
         factory = LiveMatchViewModel.factory(context.applicationContext, matchId, teamId)
     )
 
-    val match by liveVm.match.collectAsState()
-    val ui by liveVm.ui.collectAsState()
-    val events by liveVm.events.collectAsState()
-    val matchPlayers by liveVm.matchPlayers.collectAsState()
-    val teamPlayers by liveVm.teamPlayers.collectAsState()
-    val customStatTypes by liveVm.customStatTypes.collectAsState()
+    val match by liveVm.match.collectAsStateWithLifecycle()
+    val ui by liveVm.ui.collectAsStateWithLifecycle()
+    val fieldPositions by liveVm.fieldPositions.collectAsStateWithLifecycle()
+    val events by liveVm.events.collectAsStateWithLifecycle()
+    val matchPlayers by liveVm.matchPlayers.collectAsStateWithLifecycle()
+    val teamPlayers by liveVm.teamPlayers.collectAsStateWithLifecycle()
+    val customStatTypes by liveVm.customStatTypes.collectAsStateWithLifecycle()
 
     val onFieldIds = remember(matchPlayers) {
         matchPlayers.filter { it.isOnField }.map { it.playerId }.toSet()
@@ -501,7 +522,6 @@ private fun LiveMatchRoute(
             .groupingBy { it.playerId ?: -1 }
             .eachCount()
             .filterKeys { it > 0 }
-        // Doble amarilla = roja visual (sin evento ROJA extra)
         val fromDoubleYellow = yellowCards
             .filter { it.value >= 2 }
             .mapValues { 1 }
@@ -514,6 +534,9 @@ private fun LiveMatchRoute(
         match = current,
         team = team,
         ui = ui,
+        clock = liveVm.clock,
+        fieldSeconds = liveVm.fieldSeconds,
+        fieldPositions = fieldPositions,
         events = events,
         customStatTypes = customStatTypes,
         playersOnField = onField,
@@ -532,8 +555,10 @@ private fun LiveMatchRoute(
         onSetShowStarterTime = liveVm::setShowStarterTime,
         onClearFeedback = liveVm::clearFeedback,
         onUndo = liveVm::undoLastEvent,
-        onFinish = { liveVm.finishMatch(onFinished) },
-        onBack = onBack
+        onFinish = { onDone -> liveVm.finishMatch(onDone) },
+        onBack = {
+            if (current.status == MatchStatus.FINISHED) onFinished() else onBack()
+        }
     )
 }
 
@@ -549,11 +574,33 @@ private fun SettingsRoute(
         key = "settings_$teamId",
         factory = EventTypesViewModel.factory(context.applicationContext, teamId)
     )
-    val types by vm.types.collectAsState()
+    val types by vm.types.collectAsStateWithLifecycle()
+    val backupBusy by vm.backupBusy.collectAsStateWithLifecycle()
+    val backupMessage by vm.backupMessage.collectAsStateWithLifecycle()
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) vm.exportBackup(uri)
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) vm.importBackup(uri)
+    }
 
     SettingsScreen(
         team = team,
         types = types,
+        backupBusy = backupBusy,
+        backupMessage = backupMessage,
+        onClearBackupMessage = vm::clearBackupMessage,
+        onExportBackup = {
+            exportLauncher.launch("alhendin_backup_${System.currentTimeMillis()}.zip")
+        },
+        onImportBackup = {
+            importLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+        },
         onAdd = vm::add,
         onUpdate = vm::update,
         onToggleActive = vm::setActive,
@@ -569,7 +616,7 @@ private fun CustomizeHomeRoute(onBack: () -> Unit) {
     val vm: CustomizeHomeViewModel = viewModel(
         factory = CustomizeHomeViewModel.factory(context.applicationContext)
     )
-    val config by vm.layoutConfig.collectAsState()
+    val config by vm.layoutConfig.collectAsStateWithLifecycle()
 
     CustomizeHomeScreen(
         config = config,
@@ -592,8 +639,8 @@ private fun StatisticsRoute(
         key = "stats_$teamId",
         factory = StatisticsViewModel.factory(context.applicationContext, teamId)
     )
-    val stats by statsVm.playerStats.collectAsState()
-    val finished by statsVm.finishedMatches.collectAsState()
+    val stats by statsVm.playerStats.collectAsStateWithLifecycle()
+    val finished by statsVm.finishedMatches.collectAsStateWithLifecycle()
 
     StatisticsScreen(
         team = team,

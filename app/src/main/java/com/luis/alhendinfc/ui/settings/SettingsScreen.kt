@@ -61,6 +61,11 @@ import com.luis.alhendinfc.ui.theme.GreenMint
 fun SettingsScreen(
     team: Team?,
     types: List<CustomStatType>,
+    backupBusy: Boolean = false,
+    backupMessage: BackupUiMessage? = null,
+    onClearBackupMessage: () -> Unit = {},
+    onExportBackup: () -> Unit = {},
+    onImportBackup: () -> Unit = {},
     onAdd: (label: String, shortLabel: String, appliesTo: CustomStatAppliesTo) -> Unit,
     onUpdate: (CustomStatType, label: String, shortLabel: String, appliesTo: CustomStatAppliesTo) -> Unit,
     onToggleActive: (CustomStatType, Boolean) -> Unit,
@@ -71,6 +76,42 @@ fun SettingsScreen(
     var editing by remember { mutableStateOf<CustomStatType?>(null) }
     var creating by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<CustomStatType?>(null) }
+    var confirmImport by remember { mutableStateOf(false) }
+
+    if (backupMessage != null) {
+        AlertDialog(
+            onDismissRequest = onClearBackupMessage,
+            title = {
+                Text(if (backupMessage.isError) "Error" else "Copia de seguridad")
+            },
+            text = { Text(backupMessage.text) },
+            confirmButton = {
+                TextButton(onClick = onClearBackupMessage) { Text("OK") }
+            }
+        )
+    }
+
+    if (confirmImport) {
+        AlertDialog(
+            onDismissRequest = { confirmImport = false },
+            title = { Text("Importar datos") },
+            text = {
+                Text(
+                    "Esto sustituye TODOS los datos actuales de la app por el backup. " +
+                        "No se puede deshacer. ¿Continuar?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmImport = false
+                    onImportBackup()
+                }) { Text("Importar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmImport = false }) { Text("Cancelar") }
+            }
+        )
+    }
 
     if (creating) {
         StatTypeEditorDialog(
@@ -199,6 +240,52 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = GreenMint
                         )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2A1E)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Copia de seguridad",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        "Exporta absolutamente toda la base de datos: equipos, jugadores, " +
+                            "partidos, convocatorias, eventos (goles, asistencias, tarjetas, " +
+                            "paradas, robos…), tipos personalizados, clubs, calendario e inicio. " +
+                            "Así recuperas también las estadísticas. Guarda el ZIP en el PC.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GreenMint
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        TextButton(
+                            onClick = onExportBackup,
+                            enabled = !backupBusy
+                        ) {
+                            Text(if (backupBusy) "…" else "Exportar")
+                        }
+                        TextButton(
+                            onClick = { confirmImport = true },
+                            enabled = !backupBusy
+                        ) {
+                            Text("Importar")
+                        }
                     }
                 }
             }

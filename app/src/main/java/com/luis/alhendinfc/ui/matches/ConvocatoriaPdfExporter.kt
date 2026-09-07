@@ -260,8 +260,25 @@ class ConvocatoriaPdfExporter(private val context: Context) {
     private fun loadBitmap(uriStr: String): Bitmap? {
         return try {
             val uri = Uri.parse(uriStr)
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            }
+            var sample = 1
+            var w = bounds.outWidth
+            var h = bounds.outHeight
+            val maxSide = 256
+            while (w / 2 >= maxSide || h / 2 >= maxSide) {
+                w /= 2
+                h /= 2
+                sample *= 2
+            }
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sample.coerceAtLeast(1)
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
             context.contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream)
+                BitmapFactory.decodeStream(stream, null, opts)
             }
         } catch (_: Exception) { null }
     }

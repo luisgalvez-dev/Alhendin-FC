@@ -3,6 +3,7 @@ package com.luis.alhendinfc.data.local
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -16,6 +17,12 @@ interface TeamDao {
 
     @Query("SELECT * FROM team WHERE isSelected = 1 LIMIT 1")
     fun getSelectedTeam(): Flow<TeamEntity?>
+
+    @Query("SELECT * FROM team ORDER BY id ASC")
+    suspend fun getAllOnce(): List<TeamEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(teams: List<TeamEntity>)
 
     @Insert
     suspend fun insertTeam(team: TeamEntity): Long

@@ -10,6 +10,7 @@ import com.luis.alhendinfc.domain.model.HomeLayoutConfig
 import com.luis.alhendinfc.domain.model.HomeModule
 import com.luis.alhendinfc.domain.model.HomeModulePreference
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.homeDataStore: DataStore<Preferences> by preferencesDataStore(name = "home_prefs")
@@ -26,6 +27,17 @@ class HomePreferencesRepository(private val dataStore: DataStore<Preferences>) {
                 if (it.module == module) it.copy(enabled = enabled) else it
             }
         }
+    }
+
+    suspend fun restoreEncodedLayout(raw: String?) {
+        dataStore.edit {
+            it[KEY_LAYOUT] = encode(decode(raw))
+        }
+    }
+
+    suspend fun currentEncodedLayout(): String {
+        val prefs = dataStore.data.map { it[KEY_LAYOUT] }.first()
+        return prefs ?: encode(HomeLayoutConfig.defaults())
     }
 
     suspend fun moveUp(module: HomeModule) {

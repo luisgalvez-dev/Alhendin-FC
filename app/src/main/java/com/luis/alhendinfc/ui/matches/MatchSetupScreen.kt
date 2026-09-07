@@ -57,6 +57,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,20 +80,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luis.alhendinfc.domain.model.CallupStatus
+import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Formation
 import com.luis.alhendinfc.domain.model.Match
+import com.luis.alhendinfc.domain.model.MatchEvent
 import com.luis.alhendinfc.domain.model.MatchPlayer
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.Team
+import com.luis.alhendinfc.ui.live.MatchReportExporter
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.theme.GreenPitch
-import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -103,6 +108,8 @@ fun MatchSetupScreen(
     teamPlayers: List<Player>,
     team: Team?,
     fixtures: List<FixtureRow> = emptyList(),
+    matchEvents: List<MatchEvent> = emptyList(),
+    eventLabel: (MatchEvent) -> String = { EventLabels.resolve(it) },
     onSave: (Match) -> Unit,
     onPlayerCallup: (playerId: Int, status: CallupStatus) -> Unit,
     onDelete: () -> Unit,
@@ -274,26 +281,31 @@ fun MatchSetupScreen(
                         onClick = { activeMode = CallupStatus.SUPLENTE }
                     )
                     Spacer(Modifier.width(8.dp))
-                    // Export PDF
-                    IconButton(
-                        onClick = {
-                            onSave(buildCurrentMatch())
-                            exportConvocatoriaPdf(
-                                context = context,
-                                match = buildCurrentMatch(),
-                                team = team,
-                                players = teamPlayers,
-                                callupMap = callupMap
+                    if (match.status == MatchStatus.FINISHED) {
+                        IconButton(
+                            onClick = {
+                                scope.launch {
+                                    exportConvocatoriaAndActa(
+                                        context = context,
+                                        match = buildCurrentMatch(),
+                                        team = team,
+                                        players = teamPlayers,
+                                        callupMap = callupMap,
+                                        events = matchEvents,
+                                        eventLabel = eventLabel,
+                                        snackbarHostState = snackbarHostState
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(
+                                Icons.Default.Share,
+                                contentDescription = "Exportar convocatoria y acta",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
-                    ) {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = "Exportar PDF",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                        Spacer(Modifier.width(4.dp))
                     }
-                    Spacer(Modifier.width(4.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF12351A)
@@ -655,19 +667,31 @@ fun MatchSetupScreen(
                     ) {
                         Text("CONTINUAR → PARTIDO EN VIVO", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        onSave(buildCurrentMatch())
-                        scope.launch { snackbarHostState.showSnackbar("Convocatoria guardada") }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.5.dp, GreenMint),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = GreenMint)
-                ) {
-                    Text("GUARDAR CONVOCATORIA", fontWeight = FontWeight.Bold)
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                    exportConvocatoriaAndActa(
+                                        context = context,
+                                        match = buildCurrentMatch(),
+                                        team = team,
+                                        players = teamPlayers,
+                                        callupMap = callupMap,
+                                        events = matchEvents,
+                                        eventLabel = eventLabel,
+                                        snackbarHostState = snackbarHostState
+                                    )
+                                }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.5.dp, GreenMint),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = GreenMint)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("EXPORTAR CONVOCATORIA + ACTA", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
                 }
 
                 OutlinedButton(
@@ -880,29 +904,61 @@ private fun formatTime(hour: Int, minute: Int): String {
     return "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
 }
 
-private fun exportConvocatoriaPdf(
+private suspend fun exportConvocatoriaAndActa(
     context: Context,
     match: Match,
     team: Team?,
     players: List<Player>,
-    callupMap: Map<Int, CallupStatus>
+    callupMap: Map<Int, CallupStatus>,
+    events: List<MatchEvent>,
+    eventLabel: (MatchEvent) -> String,
+    snackbarHostState: SnackbarHostState
 ) {
     try {
-        val pdfUri = ConvocatoriaPdfExporter(context).export(
-            match = match,
-            team = team,
-            players = players,
-            callupMap = callupMap
-        )
-        if (pdfUri != null) {
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_STREAM, pdfUri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(intent, "Compartir convocatoria"))
+        val uris = withContext(Dispatchers.IO) {
+            val convUri = ConvocatoriaPdfExporter(context).export(
+                match = match,
+                team = team,
+                players = players,
+                callupMap = callupMap
+            )
+            val teamGoals = if (match.isHome) (match.homeScore ?: 0) else (match.awayScore ?: 0)
+            val rivalGoals = if (match.isHome) (match.awayScore ?: 0) else (match.homeScore ?: 0)
+            val maxPeriod = events.maxOfOrNull { it.period } ?: match.numParts.coerceAtLeast(1)
+            val actaUri = MatchReportExporter(context).exportAll(
+                match = match,
+                team = team,
+                events = events,
+                players = players,
+                teamGoals = teamGoals,
+                rivalGoals = rivalGoals,
+                period = maxPeriod,
+                elapsedSeconds = 0,
+                secondsOnField = emptyMap(),
+                eventLabel = eventLabel
+            ).pdfUri
+            listOfNotNull(convUri, actaUri)
         }
+        if (uris.isEmpty()) {
+            snackbarHostState.showSnackbar("No se pudieron generar los PDF")
+            return
+        }
+        val share = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "application/pdf"
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                "Convocatoria y acta · ${team?.name ?: "Equipo"} vs ${match.rival.ifBlank { "Rival" }}"
+            )
+            putExtra(
+                Intent.EXTRA_TEXT,
+                "Adjuntos: convocatoria + acta del partido (PDF)."
+            )
+        }
+        context.startActivity(Intent.createChooser(share, "Exportar convocatoria y acta"))
+        snackbarHostState.showSnackbar("Convocatoria + acta listas")
     } catch (_: Exception) {
-        // Silent fail: FileProvider not yet configured or other error
+        snackbarHostState.showSnackbar("No se pudieron exportar los PDF")
     }
 }

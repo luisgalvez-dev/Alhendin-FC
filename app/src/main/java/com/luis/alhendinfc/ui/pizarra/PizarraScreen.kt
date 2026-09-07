@@ -1,6 +1,5 @@
 package com.luis.alhendinfc.ui.pizarra
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -60,7 +59,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -78,13 +76,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.theme.GreenPitch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -101,6 +98,8 @@ fun PizarraScreen(
     onImagePicked: (Uri) -> Unit,
     onVideoPicked: (Uri) -> Unit,
     onTogglePlay: () -> Unit,
+    onSeekBack: () -> Unit,
+    onSeekForward: () -> Unit,
     onStartStroke: (BoardPoint) -> Unit,
     onUpdateStroke: (BoardPoint) -> Unit,
     onFinishStroke: () -> Unit,
@@ -153,6 +152,8 @@ fun PizarraScreen(
                 onPickImage = { imagePicker.launch("image/*") },
                 onPickVideo = { videoPicker.launch("video/*") },
                 onTogglePlay = onTogglePlay,
+                onSeekBack = onSeekBack,
+                onSeekForward = onSeekForward,
                 onUndo = onUndo,
                 onClear = onClear,
                 modifier = Modifier
@@ -184,6 +185,8 @@ private fun PizarraToolbar(
     onPickImage: () -> Unit,
     onPickVideo: () -> Unit,
     onTogglePlay: () -> Unit,
+    onSeekBack: () -> Unit,
+    onSeekForward: () -> Unit,
     onUndo: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier
@@ -208,6 +211,8 @@ private fun PizarraToolbar(
                 onClick = onTogglePlay,
                 accent = AmberAccent
             )
+            ToolChip(label = "-10s", selected = false, onClick = onSeekBack, accent = GreenMint)
+            ToolChip(label = "+10s", selected = false, onClick = onSeekForward, accent = GreenMint)
         }
 
         SectionLabel("Herramienta")
@@ -349,15 +354,11 @@ private fun BoardArea(
 
     LaunchedEffect(state.mediaUri, state.background) {
         if (state.background == BoardBackground.IMAGE && state.mediaUri != null) {
-            imageBitmap = withContext(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(state.mediaUri)?.use { stream ->
-                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                    }
-                } catch (_: Exception) {
-                    null
-                }
-            }
+            imageBitmap = LocalImageLoader.load(
+                context,
+                state.mediaUri.toString(),
+                maxSidePx = 1280
+            )
         } else {
             imageBitmap = null
         }
@@ -391,6 +392,7 @@ private fun BoardArea(
                     VideoBackground(
                         uri = state.mediaUri,
                         playing = state.isVideoPlaying,
+                        seekPulse = state.videoSeekPulse,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
@@ -422,6 +424,7 @@ private fun PlaceholderMessage(text: String) {
 private fun VideoBackground(
     uri: Uri,
     playing: Boolean,
+    seekPulse: VideoSeekPulse?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -443,6 +446,13 @@ private fun VideoBackground(
     LaunchedEffect(playing) {
         exoPlayer.playWhenReady = playing
         if (playing) exoPlayer.play() else exoPlayer.pause()
+    }
+
+    LaunchedEffect(seekPulse?.id) {
+        val pulse = seekPulse ?: return@LaunchedEffect
+        val duration = exoPlayer.duration.coerceAtLeast(0L)
+        val target = (exoPlayer.currentPosition + pulse.deltaMs).coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE)
+        exoPlayer.seekTo(target)
     }
 
     AndroidView(

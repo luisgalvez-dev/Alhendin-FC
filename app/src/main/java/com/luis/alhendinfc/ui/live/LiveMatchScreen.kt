@@ -2,6 +2,7 @@ package com.luis.alhendinfc.ui.live
 
 import android.content.Intent
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -63,9 +65,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -75,15 +78,19 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.abs
 import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.CustomStatAppliesTo
 import com.luis.alhendinfc.domain.model.CustomStatType
+import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
+import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.StatisticType
 import com.luis.alhendinfc.domain.model.Team
+import com.luis.alhendinfc.ui.matches.ConvocatoriaPdfExporter
 import com.luis.alhendinfc.ui.matches.JerseyIcon
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
@@ -91,7 +98,11 @@ import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.theme.GreenPitch
 import com.luis.alhendinfc.ui.theme.TealSoft
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -105,6 +116,9 @@ fun LiveMatchScreen(
     match: Match,
     team: Team?,
     ui: LiveMatchUiState,
+    clock: StateFlow<LiveClockState>,
+    fieldSeconds: StateFlow<Map<Int, Int>>,
+    fieldPositions: Map<Int, Offset>,
     events: List<MatchEvent>,
     customStatTypes: List<CustomStatType>,
     playersOnField: List<Player>,
@@ -123,7 +137,7 @@ fun LiveMatchScreen(
     onSetShowStarterTime: (Boolean) -> Unit,
     onClearFeedback: () -> Unit,
     onUndo: () -> Unit,
-    onFinish: () -> Unit,
+    onFinish: (onDone: () -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
     val teamName = team?.name ?: "Equipo"
@@ -131,26 +145,47 @@ fun LiveMatchScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // KEEP_SCREEN_ON lo gestiona MainActivity (tablet en banquillo).
     val rivalCustomTypes = remember(customStatTypes) {
         customStatTypes.filter { it.appliesTo == CustomStatAppliesTo.RIVAL }
     }
-
     var selectedPlayer by remember { mutableStateOf<Player?>(null) }
     var showRivalSheet by remember { mutableStateOf(false) }
     var showOptions by remember { mutableStateOf(false) }
     var showEvents by remember { mutableStateOf(false) }
     var showFinishDialog by remember { mutableStateOf(false) }
+    var showPostFinishDialog by remember { mutableStateOf(false) }
     var pendingSubOut by remember { mutableStateOf<Player?>(null) }
     var pendingSubIn by remember { mutableStateOf<Player?>(null) }
     var draggingBenchPlayer by remember { mutableStateOf<Player?>(null) }
     var exporting by remember { mutableStateOf(false) }
+    val isFinished = match.status == MatchStatus.FINISHED || showPostFinishDialog
 
-    fun exportMatchReport() {
-        if (exporting) return
+    fun exportConvocatoriaAndActa() {
+        if (exporting || !isFinished) return
         exporting = true
         scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                MatchReportExporter(context).exportAll(
+            val callupMap = allPlayers.associate { p ->
+                val status = when {
+                    playersOnField.any { it.id == p.id } -> CallupStatus.TITULAR
+                    playersOnBench.any { it.id == p.id } -> CallupStatus.SUPLENTE
+                    else -> CallupStatus.NONE
+                }
+                p.id to status
+            }.filterValues { it != CallupStatus.NONE }
+
+            val uris = withContext(Dispatchers.IO) {
+                val convUri = try {
+                    ConvocatoriaPdfExporter(context).export(
+                        match = match,
+                        team = team,
+                        players = allPlayers,
+                        callupMap = callupMap
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+                val actaUri = MatchReportExporter(context).exportAll(
                     match = match,
                     team = team,
                     events = events,
@@ -158,29 +193,29 @@ fun LiveMatchScreen(
                     teamGoals = ui.teamGoals,
                     rivalGoals = ui.rivalGoals,
                     period = ui.period,
-                    elapsedSeconds = ui.elapsedSeconds,
-                    secondsOnField = ui.secondsOnField,
+                    elapsedSeconds = clock.value.elapsedSeconds,
+                    secondsOnField = fieldSeconds.value,
                     eventLabel = eventLabel
-                )
+                ).pdfUri
+                listOfNotNull(convUri, actaUri)
             }
             exporting = false
-            val uris = listOfNotNull(result.pdfUri, result.csvUri)
             if (uris.isEmpty()) {
-                snackbarHostState.showSnackbar("No se pudo exportar el acta")
+                snackbarHostState.showSnackbar("No se pudieron generar los PDF")
                 return@launch
             }
             val share = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                type = "*/*"
+                type = "application/pdf"
                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                putExtra(Intent.EXTRA_SUBJECT, "Acta $teamName vs $rivalName")
+                putExtra(Intent.EXTRA_SUBJECT, "Convocatoria y acta · $teamName vs $rivalName")
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    "Acta del partido $teamName ${ui.teamGoals}-${ui.rivalGoals} $rivalName (PDF + CSV para Excel/IA)."
+                    "Adjuntos: convocatoria + acta del partido $teamName ${ui.teamGoals}-${ui.rivalGoals} $rivalName."
                 )
             }
-            context.startActivity(Intent.createChooser(share, "Exportar acta del partido"))
-            snackbarHostState.showSnackbar("Acta lista (PDF + CSV)")
+            context.startActivity(Intent.createChooser(share, "Exportar convocatoria y acta"))
+            snackbarHostState.showSnackbar("Convocatoria + acta listas")
         }
     }
 
@@ -230,14 +265,19 @@ fun LiveMatchScreen(
 
     if (showOptions) {
         OptionsDialog(
+            isFinished = isFinished,
             showJerseyNumbers = ui.showJerseyNumbers,
             showStarterTime = ui.showStarterTime,
             exporting = exporting,
             onShowJerseyNumbers = onSetShowJerseyNumbers,
             onShowStarterTime = onSetShowStarterTime,
-            onExport = {
+            onExportActa = {
                 showOptions = false
-                exportMatchReport()
+                exportConvocatoriaAndActa()
+            },
+            onExportConvocatoria = {
+                showOptions = false
+                exportConvocatoriaAndActa()
             },
             onFinish = { showOptions = false; showFinishDialog = true },
             onDismiss = { showOptions = false }
@@ -248,6 +288,7 @@ fun LiveMatchScreen(
         EventsDialog(
             events = events,
             players = allPlayers,
+            durationPerPart = match.durationPerPart,
             eventLabel = eventLabel,
             onUndo = onUndo,
             onDismiss = { showEvents = false }
@@ -299,12 +340,51 @@ fun LiveMatchScreen(
                 Text("Resultado ${ui.teamGoals}-${ui.rivalGoals}. ¿Terminar y guardar estadísticas?")
             },
             confirmButton = {
-                TextButton(onClick = { showFinishDialog = false; onFinish() }) {
+                TextButton(
+                    onClick = {
+                        showFinishDialog = false
+                        onFinish { showPostFinishDialog = true }
+                    }
+                ) {
                     Text("Terminar")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showFinishDialog = false }) { Text("Seguir") }
+            }
+        )
+    }
+
+    if (showPostFinishDialog && isFinished) {
+        AlertDialog(
+            onDismissRequest = { /* Obligatorio elegir acción */ },
+            title = { Text("Partido finalizado", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Resultado ${ui.teamGoals}-${ui.rivalGoals}. Exporta convocatoria y acta juntos en un solo envío.")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = { exportConvocatoriaAndActa() },
+                        enabled = !exporting,
+                        colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (exporting) "Exportando…" else "Exportar convocatoria + acta (PDF)",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showPostFinishDialog = false
+                        onBack()
+                    }
+                ) { Text("Salir") }
             }
         )
     }
@@ -315,7 +395,10 @@ fun LiveMatchScreen(
                 teamName = teamName,
                 rivalName = rivalName,
                 rivalShieldUri = match.rivalShieldUri,
-                ui = ui,
+                period = ui.period,
+                clock = clock,
+                teamGoals = ui.teamGoals,
+                rivalGoals = ui.rivalGoals,
                 numParts = match.numParts,
                 onBack = onBack,
                 onToggleTimer = onToggleTimer,
@@ -328,10 +411,10 @@ fun LiveMatchScreen(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 PitchWithPlayers(
                     players = playersOnField,
-                    positions = ui.fieldPositions,
+                    positions = fieldPositions,
                     showNumbers = ui.showJerseyNumbers,
                     showTime = ui.showStarterTime,
-                    secondsOnField = ui.secondsOnField,
+                    fieldSeconds = fieldSeconds,
                     yellowCards = yellowCards,
                     redCards = redCards,
                     highlightForSub = draggingBenchPlayer != null,
@@ -434,7 +517,10 @@ private fun TopBar(
     teamName: String,
     rivalName: String,
     rivalShieldUri: String?,
-    ui: LiveMatchUiState,
+    period: Int,
+    clock: StateFlow<LiveClockState>,
+    teamGoals: Int,
+    rivalGoals: Int,
     numParts: Int,
     onBack: () -> Unit,
     onToggleTimer: () -> Unit,
@@ -443,8 +529,10 @@ private fun TopBar(
     onOpenOptions: () -> Unit,
     onOpenEvents: () -> Unit
 ) {
-    val mm = (ui.elapsedSeconds / 60).toString().padStart(2, '0')
-    val ss = (ui.elapsedSeconds % 60).toString().padStart(2, '0')
+    val clockState by clock.collectAsStateWithLifecycle()
+    val mm = (clockState.elapsedSeconds / 60).toString().padStart(2, '0')
+    val ss = (clockState.elapsedSeconds % 60).toString().padStart(2, '0')
+    val isRunning = clockState.isRunning
 
     Row(
         modifier = Modifier
@@ -457,7 +545,6 @@ private fun TopBar(
             Icon(Icons.Default.ArrowBack, contentDescription = "Volver", tint = Color.White)
         }
 
-        // Reloj + controles alineados en una sola columna centrada
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.width(148.dp)
@@ -470,7 +557,7 @@ private fun TopBar(
                 textAlign = TextAlign.Center
             )
             Text(
-                "Parte ${ui.period}/$numParts",
+                "Parte $period/$numParts",
                 style = MaterialTheme.typography.labelSmall,
                 color = AmberAccent,
                 textAlign = TextAlign.Center
@@ -488,7 +575,7 @@ private fun TopBar(
                         .clickable(onClick = onToggleTimer),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (ui.isRunning) {
+                    if (isRunning) {
                         Text("❚❚", color = AmberAccent, fontSize = 14.sp)
                     } else {
                         Icon(
@@ -502,7 +589,7 @@ private fun TopBar(
                     modifier = Modifier
                         .height(40.dp)
                         .clickable(
-                            enabled = ui.period < numParts,
+                            enabled = period < numParts,
                             onClick = onNextPeriod
                         )
                         .padding(horizontal = 8.dp),
@@ -512,13 +599,12 @@ private fun TopBar(
                         "Parte+",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (ui.period < numParts) GreenMint else Color.Gray
+                        color = if (period < numParts) GreenMint else Color.Gray
                     )
                 }
             }
         }
 
-        // Marcador central
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -543,7 +629,7 @@ private fun TopBar(
                     textAlign = TextAlign.End
                 )
                 Text(
-                    "  ${ui.teamGoals} - ${ui.rivalGoals}  ",
+                    "  $teamGoals - $rivalGoals  ",
                     fontSize = 26.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = GreenLime
@@ -599,25 +685,10 @@ private fun RivalShieldAvatar(
     size: Int
 ) {
     val context = LocalContext.current
-    var bitmap by remember(shieldUri) {
-        mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null)
-    }
+    var bitmap by remember(shieldUri) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(shieldUri) {
-        if (shieldUri.isNullOrBlank()) {
-            bitmap = null
-            return@LaunchedEffect
-        }
-        bitmap = withContext(Dispatchers.IO) {
-            try {
-                context.contentResolver.openInputStream(android.net.Uri.parse(shieldUri))?.use { stream ->
-                    android.graphics.BitmapFactory.decodeStream(stream)
-                        ?.asImageBitmap()
-                }
-            } catch (_: Exception) {
-                null
-            }
-        }
+        bitmap = LocalImageLoader.load(context, shieldUri, maxSidePx = (size * 3).coerceAtLeast(96))
     }
 
     Box(
@@ -627,10 +698,10 @@ private fun RivalShieldAvatar(
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
-            androidx.compose.foundation.Image(
+            Image(
                 bitmap = bitmap!!,
                 contentDescription = "Escudo $rivalName",
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -650,7 +721,7 @@ private fun PitchWithPlayers(
     positions: Map<Int, Offset>,
     showNumbers: Boolean,
     showTime: Boolean,
-    secondsOnField: Map<Int, Int>,
+    fieldSeconds: StateFlow<Map<Int, Int>>,
     yellowCards: Map<Int, Int>,
     redCards: Map<Int, Int>,
     highlightForSub: Boolean,
@@ -666,7 +737,7 @@ private fun PitchWithPlayers(
             drawPitch(size)
         }
 
-        players.forEach { player ->
+        players.distinctBy { it.id }.forEach { player ->
             key(player.id) {
                 FieldPlayerMarker(
                     player = player,
@@ -677,7 +748,7 @@ private fun PitchWithPlayers(
                     fieldH = h,
                     showNumbers = showNumbers,
                     showTime = showTime,
-                    secondsOnField = secondsOnField[player.id] ?: 0,
+                    fieldSeconds = fieldSeconds,
                     yellowCount = yellowCards[player.id] ?: 0,
                     redCount = redCards[player.id] ?: 0,
                     highlightForSub = highlightForSub,
@@ -699,7 +770,7 @@ private fun FieldPlayerMarker(
     fieldH: Float,
     showNumbers: Boolean,
     showTime: Boolean,
-    secondsOnField: Int,
+    fieldSeconds: StateFlow<Map<Int, Int>>,
     yellowCount: Int,
     redCount: Int,
     highlightForSub: Boolean,
@@ -717,6 +788,15 @@ private fun FieldPlayerMarker(
     var markerW by remember { mutableFloatStateOf(72f) }
     var markerH by remember { mutableFloatStateOf(80f) }
     var suppressClick by remember { mutableStateOf(false) }
+
+    val playerSecsFlow = remember(player.id, fieldSeconds, showTime) {
+        if (showTime) {
+            fieldSeconds.map { it[player.id] ?: 0 }.distinctUntilChanged()
+        } else {
+            kotlinx.coroutines.flow.flowOf(0)
+        }
+    }
+    val playerSecs by playerSecsFlow.collectAsStateWithLifecycle(initialValue = 0)
 
     val latestCommittedPos by rememberUpdatedState(pos)
     val latestAllPositions by rememberUpdatedState(allPositions)
@@ -882,7 +962,7 @@ private fun FieldPlayerMarker(
         )
         if (showTime) {
             Text(
-                "%d'%02d".format(secondsOnField / 60, secondsOnField % 60),
+                "%d'%02d".format(playerSecs / 60, playerSecs % 60),
                 fontSize = 13.sp,
                 color = if (hasRed) Color(0xFF616161) else Color(0xFF1A237E),
                 fontWeight = FontWeight.ExtraBold
@@ -1164,12 +1244,14 @@ private fun ActionChip(
 
 @Composable
 private fun OptionsDialog(
+    isFinished: Boolean,
     showJerseyNumbers: Boolean,
     showStarterTime: Boolean,
     exporting: Boolean,
     onShowJerseyNumbers: (Boolean) -> Unit,
     onShowStarterTime: (Boolean) -> Unit,
-    onExport: () -> Unit,
+    onExportActa: () -> Unit,
+    onExportConvocatoria: () -> Unit,
     onFinish: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1191,27 +1273,30 @@ private fun OptionsDialog(
                     checked = showStarterTime,
                     onChecked = onShowStarterTime
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(
-                    onClick = onExport,
-                    enabled = !exporting,
-                    colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        if (exporting) "Exportando…" else "Exportar acta (PDF + CSV)",
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Button(
-                    onClick = onFinish,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Terminar partido", fontWeight = FontWeight.Bold)
+                if (isFinished) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onExportActa,
+                        enabled = !exporting,
+                        colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            if (exporting) "Exportando…" else "Exportar convocatoria + acta (PDF)",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onFinish,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Terminar partido", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         },
@@ -1246,6 +1331,7 @@ private fun OptionRow(
 private fun EventsDialog(
     events: List<MatchEvent>,
     players: List<Player>,
+    durationPerPart: Int,
     eventLabel: (MatchEvent) -> String,
     onUndo: () -> Unit,
     onDismiss: () -> Unit
@@ -1270,8 +1356,17 @@ private fun EventsDialog(
                             StatisticType.RIVAL_GOAL -> "Rival"
                             else -> if (e.playerId == null) "Rival" else nameOf(e.playerId)
                         }
+                        val minute = EventLabels.displayMinute(e, durationPerPart)
+                        val label = EventLabels.resolve(
+                            e,
+                            // Si el caller ya resolvió bien, usamos eso vía resolve fallback
+                            emptyMap()
+                        ).let { resolved ->
+                            val raw = eventLabel(e)
+                            if (raw.startsWith("SAMPLE_") || raw == e.typeCode) resolved else raw
+                        }
                         Text(
-                            "${e.minute}' · ${eventLabel(e)} · $detail",
+                            "$minute' · $label · $detail",
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }

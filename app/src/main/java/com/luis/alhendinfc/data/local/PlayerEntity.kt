@@ -1,9 +1,13 @@
 package com.luis.alhendinfc.data.local
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "player")
+@Entity(
+    tableName = "player",
+    indices = [Index(value = ["teamId"])]
+)
 data class PlayerEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val teamId: Int,

@@ -1,7 +1,5 @@
 package com.luis.alhendinfc.ui.home
 
-import android.graphics.BitmapFactory
-import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -53,7 +51,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -71,8 +68,7 @@ import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.theme.TealSoft
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 
 @Composable
 fun HomeScreen(
@@ -415,20 +411,7 @@ fun TeamAvatar(team: Team?, size: Int) {
     var bitmap by remember(team?.shieldUri) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(team?.shieldUri) {
-        val uri = team?.shieldUri
-        if (uri != null) {
-            bitmap = withContext(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
-                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                    }
-                } catch (e: Exception) {
-                    null
-                }
-            }
-        } else {
-            bitmap = null
-        }
+        bitmap = LocalImageLoader.load(context, team?.shieldUri, maxSidePx = (size * 3).coerceAtLeast(128))
     }
 
     Box(

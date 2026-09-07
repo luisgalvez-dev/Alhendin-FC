@@ -20,6 +20,12 @@ interface OpponentClubDao {
     @Query("SELECT COUNT(*) FROM opponent_club WHERE teamId = :teamId")
     suspend fun countByTeam(teamId: Int): Int
 
+    @Query("SELECT * FROM opponent_club ORDER BY id ASC")
+    suspend fun getAllOnce(): List<OpponentClubEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replaceAll(entities: List<OpponentClubEntity>)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(entity: OpponentClubEntity): Long
 
@@ -44,6 +50,12 @@ interface SeasonFixtureDao {
 
     @Query("SELECT COUNT(*) FROM season_fixture WHERE teamId = :teamId")
     suspend fun countByTeam(teamId: Int): Int
+
+    @Query("SELECT * FROM season_fixture ORDER BY id ASC")
+    suspend fun getAllOnce(): List<SeasonFixtureEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replaceAll(entities: List<SeasonFixtureEntity>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: SeasonFixtureEntity): Long

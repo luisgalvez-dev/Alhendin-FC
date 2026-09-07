@@ -1,8 +1,6 @@
 package com.luis.alhendinfc.ui.players
 
 import android.content.Intent
-import android.graphics.BitmapFactory
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -46,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,8 +53,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.PlayerPosition
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 
 @Composable
 fun PlayerEditDialog(
@@ -78,18 +74,7 @@ fun PlayerEditDialog(
     var photoBitmap by remember(photoUri) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(photoUri) {
-        val uri = photoUri
-        if (uri != null) {
-            photoBitmap = withContext(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
-                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                    }
-                } catch (e: Exception) { null }
-            }
-        } else {
-            photoBitmap = null
-        }
+        photoBitmap = LocalImageLoader.load(context, photoUri, maxSidePx = 384)
     }
 
     val imagePicker = rememberLauncherForActivityResult(

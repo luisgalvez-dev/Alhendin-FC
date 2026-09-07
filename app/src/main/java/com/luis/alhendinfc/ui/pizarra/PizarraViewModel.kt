@@ -48,8 +48,12 @@ data class PizarraUiState(
     val mediaUri: Uri? = null,
     val strokes: List<DrawStroke> = emptyList(),
     val currentStroke: DrawStroke? = null,
-    val isVideoPlaying: Boolean = false
+    val isVideoPlaying: Boolean = false,
+    /** Pulso de seek (±ms); el id cambia cada petición. */
+    val videoSeekPulse: VideoSeekPulse? = null
 )
+
+data class VideoSeekPulse(val deltaMs: Long, val id: Long = System.nanoTime())
 
 class PizarraViewModel : ViewModel() {
 
@@ -100,6 +104,10 @@ class PizarraViewModel : ViewModel() {
 
     fun setVideoPlaying(playing: Boolean) {
         _uiState.update { it.copy(isVideoPlaying = playing) }
+    }
+
+    fun seekVideo(deltaMs: Long) {
+        _uiState.update { it.copy(videoSeekPulse = VideoSeekPulse(deltaMs = deltaMs)) }
     }
 
     fun startStroke(point: BoardPoint) {

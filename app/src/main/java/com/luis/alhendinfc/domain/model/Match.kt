@@ -17,5 +17,47 @@ data class Match(
     val homeScore: Int? = null,
     val awayScore: Int? = null,
     val opponentClubId: Int? = null,
-    val rivalShieldUri: String? = null
-)
+    val rivalShieldUri: String? = null,
+    val livePeriod: Int = 1,
+    val liveElapsedSeconds: Int = 0,
+    val liveClockRunning: Boolean = false,
+    val liveClockAnchorWallMs: Long = 0L,
+    val fieldSecondsJson: String = "",
+    val fieldPositionsJson: String = ""
+) {
+    fun decodeFieldSeconds(): Map<Int, Int> {
+        if (fieldSecondsJson.isBlank()) return emptyMap()
+        return fieldSecondsJson.split(',')
+            .mapNotNull { part ->
+                val bits = part.split(':')
+                if (bits.size != 2) return@mapNotNull null
+                val id = bits[0].toIntOrNull() ?: return@mapNotNull null
+                val secs = bits[1].toIntOrNull() ?: return@mapNotNull null
+                id to secs
+            }
+            .toMap()
+    }
+
+    /** playerId → (x, y) relativos 0..1 */
+    fun decodeFieldPositions(): Map<Int, Pair<Float, Float>> {
+        if (fieldPositionsJson.isBlank()) return emptyMap()
+        return fieldPositionsJson.split(',')
+            .mapNotNull { part ->
+                val bits = part.split(':')
+                if (bits.size != 3) return@mapNotNull null
+                val id = bits[0].toIntOrNull() ?: return@mapNotNull null
+                val x = bits[1].toFloatOrNull() ?: return@mapNotNull null
+                val y = bits[2].toFloatOrNull() ?: return@mapNotNull null
+                id to (x to y)
+            }
+            .toMap()
+    }
+
+    companion object {
+        fun encodeFieldSeconds(map: Map<Int, Int>): String =
+            map.entries.joinToString(",") { "${it.key}:${it.value}" }
+
+        fun encodeFieldPositions(map: Map<Int, Pair<Float, Float>>): String =
+            map.entries.joinToString(",") { "${it.key}:${it.value.first}:${it.value.second}" }
+    }
+}

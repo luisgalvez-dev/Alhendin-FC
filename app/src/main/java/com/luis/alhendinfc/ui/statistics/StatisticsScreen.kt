@@ -86,7 +86,8 @@ fun StatisticsScreen(
         ) {
             Text(
                 "Resumen de partidos finalizados ($finishedMatchCount). " +
-                    "Los datos salen de los eventos registrados en el partido en vivo.",
+                    "Goles, asistencias y tarjetas aquí; las personalizadas (robos, paradas…) " +
+                    "se ven en la ficha de cada jugador.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
@@ -95,7 +96,10 @@ fun StatisticsScreen(
             StatsHeaderRow()
             HorizontalDivider(color = GreenAccent.copy(alpha = 0.3f))
 
-            if (stats.all { it.goals == 0 && it.assists == 0 && it.yellowCards == 0 && it.redCards == 0 && it.matchesPlayed == 0 }) {
+            if (stats.all {
+                    it.goals == 0 && it.assists == 0 && it.yellowCards == 0 && it.redCards == 0 &&
+                        it.matchesPlayed == 0 && it.customStats.all { c -> c.value == 0 }
+                }) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center

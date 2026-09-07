@@ -1,8 +1,6 @@
 package com.luis.alhendinfc.ui.team
 
 import android.content.Intent
-import android.graphics.BitmapFactory
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -37,14 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luis.alhendinfc.domain.model.Team
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 
 @Composable
 fun TeamEditDialog(
@@ -60,22 +56,11 @@ fun TeamEditDialog(
     var shieldBitmap by remember(shieldUri) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(shieldUri) {
-        val uri = shieldUri
-        if (uri != null) {
-            shieldBitmap = withContext(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
-                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                    }
-                } catch (e: Exception) { null }
-            }
-        } else {
-            shieldBitmap = null
-        }
+        shieldBitmap = LocalImageLoader.load(context, shieldUri, maxSidePx = 384)
     }
 
     val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
             try {
@@ -111,7 +96,7 @@ fun TeamEditDialog(
                             .size(72.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { imagePicker.launch("image/*") },
+                            .clickable { imagePicker.launch(arrayOf("image/*")) },
                         contentAlignment = Alignment.Center
                     ) {
                         if (shieldBitmap != null) {

@@ -23,6 +23,12 @@ interface CustomStatTypeDao {
     @Query("SELECT * FROM custom_stat_type WHERE id = :id LIMIT 1")
     suspend fun getById(id: Int): CustomStatTypeEntity?
 
+    @Query("SELECT * FROM custom_stat_type ORDER BY id ASC")
+    suspend fun getAllOnce(): List<CustomStatTypeEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replaceAll(entities: List<CustomStatTypeEntity>)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: CustomStatTypeEntity): Long
 

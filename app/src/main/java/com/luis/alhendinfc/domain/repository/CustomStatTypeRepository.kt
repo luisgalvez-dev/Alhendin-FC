@@ -10,6 +10,4 @@ interface CustomStatTypeRepository {
     suspend fun update(type: CustomStatType)
     /** Soft-delete si hay eventos; hard-delete si no. */
     suspend fun deleteOrDeactivate(type: CustomStatType)
-    /** Inserta tipos de prueba si el equipo no tiene ninguno. */
-    suspend fun ensureSampleCustomStats(teamId: Int): Boolean
 }

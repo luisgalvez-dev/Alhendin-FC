@@ -17,6 +17,18 @@ interface MatchDao {
     @Query("SELECT * FROM match_table WHERE id = :id")
     fun getMatchById(id: Int): Flow<MatchEntity?>
 
+    @Query("SELECT * FROM match_table ORDER BY id ASC")
+    suspend fun getAllMatchesOnce(): List<MatchEntity>
+
+    @Query("SELECT * FROM match_player ORDER BY id ASC")
+    suspend fun getAllMatchPlayersOnce(): List<MatchPlayerEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMatches(matches: List<MatchEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMatchPlayers(rows: List<MatchPlayerEntity>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMatch(match: MatchEntity): Long
 

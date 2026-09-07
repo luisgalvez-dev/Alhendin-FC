@@ -6,8 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.local.AlhendinDatabase
-import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.CustomStatType
+import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.Formation
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
@@ -19,33 +19,39 @@ import com.luis.alhendinfc.domain.model.assignPlayersToFormation
 import com.luis.alhendinfc.domain.repository.CustomStatTypeRepositoryImpl
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.PlayerRepositoryImpl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class LiveMatchUiState(
     val period: Int = 1,
-    val elapsedSeconds: Int = 0,
-    val isRunning: Boolean = false,
     val teamGoals: Int = 0,
     val rivalGoals: Int = 0,
     val ready: Boolean = false,
     val showJerseyNumbers: Boolean = true,
     val showStarterTime: Boolean = true,
-    /** segundos acumulados en campo por jugador */
-    val secondsOnField: Map<Int, Int> = emptyMap(),
-    /** posición relativa en campo (0..1) por jugador */
-    val fieldPositions: Map<Int, Offset> = emptyMap(),
     val lastFeedback: String? = null
+)
+
+/** Reloj separado: evita recomponer todo el campo cada segundo. */
+data class LiveClockState(
+    val elapsedSeconds: Int = 0,
+    val isRunning: Boolean = false
 )
 
 class LiveMatchViewModel(
@@ -56,7 +62,12 @@ class LiveMatchViewModel(
     private val teamId: Int
 ) : ViewModel() {
 
+    /**
+     * Metadatos del partido para la UI. Ignora ticks de cronómetro / JSON de posiciones
+     * para no recomponer toda la pantalla al persistir el reloj.
+     */
     val match: StateFlow<Match?> = matchRepository.getMatchById(matchId)
+        .distinctUntilChanged(::sameMatchForUi)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val matchPlayers: StateFlow<List<MatchPlayer>> = matchRepository.getMatchPlayers(matchId)
@@ -75,14 +86,26 @@ class LiveMatchViewModel(
     private val _ui = MutableStateFlow(LiveMatchUiState())
     val ui: StateFlow<LiveMatchUiState> = _ui.asStateFlow()
 
+    private val _clock = MutableStateFlow(LiveClockState())
+    val clock: StateFlow<LiveClockState> = _clock.asStateFlow()
+
+    private val _fieldSeconds = MutableStateFlow<Map<Int, Int>>(emptyMap())
+    val fieldSeconds: StateFlow<Map<Int, Int>> = _fieldSeconds.asStateFlow()
+
+    /** Posiciones aparte: un gol/feedback no recompone el campo entero. */
+    private val _fieldPositions = MutableStateFlow<Map<Int, Offset>>(emptyMap())
+    val fieldPositions: StateFlow<Map<Int, Offset>> = _fieldPositions.asStateFlow()
+
     private var tickerJob: Job? = null
+    private var persistJob: Job? = null
     private var started = false
     private var positionsInitialized = false
+    private var lastSyncedTeamGoals = -1
+    private var lastSyncedRivalGoals = -1
+    /** Ancla de pared mientras el cronómetro corre: elapsed ≈ (now - anchor) / 1000. */
+    private var clockAnchorWallMs: Long = 0L
 
     init {
-        viewModelScope.launch {
-            customStatRepository.ensureSampleCustomStats(teamId)
-        }
         viewModelScope.launch {
             val m = match.filterNotNull().first()
             if (!started && m.status != MatchStatus.FINISHED) {
@@ -90,15 +113,33 @@ class LiveMatchViewModel(
                 if (m.status == MatchStatus.OPEN) {
                     matchRepository.startLiveMatch(matchId)
                     matchRepository.updateMatch(
-                        m.copy(status = MatchStatus.LIVE, homeScore = 0, awayScore = 0)
+                        m.copy(
+                            status = MatchStatus.LIVE,
+                            homeScore = 0,
+                            awayScore = 0,
+                            livePeriod = 1,
+                            liveElapsedSeconds = 0,
+                            liveClockRunning = false,
+                            liveClockAnchorWallMs = 0L,
+                            fieldSecondsJson = "",
+                            fieldPositionsJson = ""
+                        )
                     )
-                    _ui.update { it.copy(teamGoals = 0, rivalGoals = 0, ready = true) }
+                    _ui.update { it.copy(teamGoals = 0, rivalGoals = 0, period = 1, ready = true) }
+                    _clock.value = LiveClockState(elapsedSeconds = 0, isRunning = false)
+                    _fieldSeconds.value = emptyMap()
                 } else {
                     val teamGoals = if (m.isHome) (m.homeScore ?: 0) else (m.awayScore ?: 0)
                     val rivalGoals = if (m.isHome) (m.awayScore ?: 0) else (m.homeScore ?: 0)
                     _ui.update {
-                        it.copy(teamGoals = teamGoals, rivalGoals = rivalGoals, ready = true)
+                        it.copy(
+                            teamGoals = teamGoals,
+                            rivalGoals = rivalGoals,
+                            period = m.livePeriod.coerceAtLeast(1),
+                            ready = true
+                        )
                     }
+                    restoreClockFromMatch(m)
                 }
             }
         }
@@ -107,8 +148,15 @@ class LiveMatchViewModel(
             events.collect { list ->
                 val teamGoals = list.count { it.type == StatisticType.GOAL }
                 val rivalGoals = list.count { it.type == StatisticType.RIVAL_GOAL }
-                _ui.update { it.copy(teamGoals = teamGoals, rivalGoals = rivalGoals) }
-                syncScore(teamGoals, rivalGoals)
+                val current = _ui.value
+                if (current.teamGoals != teamGoals || current.rivalGoals != rivalGoals) {
+                    _ui.update { it.copy(teamGoals = teamGoals, rivalGoals = rivalGoals) }
+                }
+                if (teamGoals != lastSyncedTeamGoals || rivalGoals != lastSyncedRivalGoals) {
+                    lastSyncedTeamGoals = teamGoals
+                    lastSyncedRivalGoals = rivalGoals
+                    syncScore(teamGoals, rivalGoals)
+                }
             }
         }
 
@@ -116,66 +164,233 @@ class LiveMatchViewModel(
             combine(matchPlayers, teamPlayers, match) { mps, players, m ->
                 Triple(mps, players, m)
             }.collect { (mps, players, m) ->
-                if (!positionsInitialized && m != null && mps.any { it.isOnField }) {
-                    initFieldPositions(m, mps, players)
+                if (m == null || players.isEmpty()) return@collect
+                val onFieldCount = mps.count { it.isOnField }
+                if (onFieldCount == 0) return@collect
+
+                if (!positionsInitialized) {
+                    val saved = m.decodeFieldPositions()
+                        .mapValues { Offset(it.value.first, it.value.second) }
+                    if (saved.isNotEmpty()) {
+                        applySavedOrFormationPositions(m, mps, players, saved)
+                    } else {
+                        initFieldPositions(m, mps, players)
+                    }
                     positionsInitialized = true
+                } else {
+                    val missing = mps
+                        .filter { it.isOnField && it.playerId !in _fieldPositions.value }
+                        .mapNotNull { mp -> players.firstOrNull { it.id == mp.playerId } }
+                    if (missing.isNotEmpty()) {
+                        placeMissingPlayers(m, missing)
+                    }
                 }
             }
         }
     }
 
+    /**
+     * Si el cronómetro estaba en marcha al salir, avanza con el tiempo real y sigue corriendo.
+     */
+    private suspend fun restoreClockFromMatch(m: Match) {
+        val maxSeconds = m.durationPerPart.coerceAtLeast(1) * 60
+        val savedElapsed = m.liveElapsedSeconds.coerceAtLeast(0)
+        val shouldContinue = m.liveClockRunning && m.liveClockAnchorWallMs > 0L
+
+        if (shouldContinue) {
+            val wallElapsed = ((System.currentTimeMillis() - m.liveClockAnchorWallMs) / 1000L)
+                .toInt()
+                .coerceIn(0, maxSeconds)
+            val delta = (wallElapsed - savedElapsed).coerceAtLeast(0)
+            val fieldMap = m.decodeFieldSeconds().toMutableMap()
+            if (delta > 0) {
+                val mps = matchPlayers.first()
+                val onFieldIds = mps.filter { it.isOnField }.map { it.playerId }.toSet()
+                val list = events.value
+                val sentOff = onFieldIds.filter { id ->
+                    val pe = list.filter { it.playerId == id }
+                    pe.any { it.type == StatisticType.RED_CARD } ||
+                        pe.count { it.type == StatisticType.YELLOW_CARD } >= 2
+                }.toSet()
+                onFieldIds.forEach { id ->
+                    if (id !in sentOff) {
+                        fieldMap[id] = (fieldMap[id] ?: 0) + delta
+                    }
+                }
+            }
+            _fieldSeconds.value = fieldMap
+            clockAnchorWallMs = m.liveClockAnchorWallMs
+            _clock.value = LiveClockState(elapsedSeconds = wallElapsed, isRunning = false)
+            if (wallElapsed >= maxSeconds) {
+                persistLiveClock(running = false)
+            } else {
+                startTimer()
+            }
+        } else {
+            clockAnchorWallMs = 0L
+            _clock.value = LiveClockState(elapsedSeconds = savedElapsed, isRunning = false)
+            _fieldSeconds.value = m.decodeFieldSeconds()
+        }
+    }
+
+    override fun onCleared() {
+        val wasRunning = _clock.value.isRunning
+        tickerJob?.cancel()
+        persistJob?.cancel()
+        // No bloquear el hilo principal al salir del partido.
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            withContext(NonCancellable) {
+                persistLiveClock(running = wasRunning)
+            }
+        }
+        super.onCleared()
+    }
+
     private fun initFieldPositions(m: Match, mps: List<MatchPlayer>, players: List<Player>) {
+        applySavedOrFormationPositions(m, mps, players, emptyMap())
+    }
+
+    private fun applySavedOrFormationPositions(
+        m: Match,
+        mps: List<MatchPlayer>,
+        players: List<Player>,
+        saved: Map<Int, Offset>
+    ) {
         val formation = Formation.fromLabel(m.formation.ifBlank { Formation.F_4_3_3.label })
-        val onField = players.filter { p -> mps.any { it.playerId == p.id && it.isOnField } }
-        val assigned = assignPlayersToFormation(onField, formation)
+        val onField = players
+            .filter { p -> mps.any { it.playerId == p.id && it.isOnField } }
+            .distinctBy { it.id }
         val map = mutableMapOf<Int, Offset>()
-        assigned.forEach { (slot, player) ->
-            if (player != null) {
-                map[player.id] = Offset(slot.x, slot.y)
-            }
-        }
-        // Portero / fallbacks for any on-field not assigned
+
         onField.forEach { p ->
-            if (p.id !in map) {
-                map[p.id] = Offset(p.position.fieldX, p.position.fieldY)
+            saved[p.id]?.let { map[p.id] = clampField(it) }
+        }
+
+        val needFormation = onField.filter { it.id !in map }
+        if (needFormation.isNotEmpty()) {
+            val usedSlots = mutableSetOf<Int>()
+            formation.slots.forEachIndexed { index, slot ->
+                val taken = map.values.any { pos ->
+                    val dx = pos.x - slot.x
+                    val dy = pos.y - slot.y
+                    dx * dx + dy * dy < 0.0025f
+                }
+                if (taken) usedSlots.add(index)
+            }
+            val assigned = assignPlayersToFormation(needFormation, formation)
+            assigned.forEachIndexed { index, (slot, player) ->
+                if (player != null && player.id !in map && index !in usedSlots) {
+                    map[player.id] = Offset(slot.x, slot.y)
+                    usedSlots.add(index)
+                }
+            }
+            val stillMissing = onField.filter { it.id !in map }
+            stillMissing.forEachIndexed { i, p ->
+                val free = formation.slots.indices.firstOrNull { it !in usedSlots }
+                if (free != null) {
+                    val slot = formation.slots[free]
+                    map[p.id] = Offset(slot.x, slot.y)
+                    usedSlots.add(free)
+                } else {
+                    map[p.id] = clampField(
+                        Offset(p.position.fieldX + i * 0.04f, p.position.fieldY)
+                    )
+                }
             }
         }
-        _ui.update { it.copy(fieldPositions = map) }
+
+        separateOverlaps(map)
+        _fieldPositions.value = map
+    }
+
+    private fun placeMissingPlayers(m: Match, missing: List<Player>) {
+        val formation = Formation.fromLabel(m.formation.ifBlank { Formation.F_4_3_3.label })
+        val map = _fieldPositions.value.toMutableMap()
+        val usedSlots = mutableSetOf<Int>()
+        formation.slots.forEachIndexed { index, slot ->
+            val taken = map.values.any { pos ->
+                val dx = pos.x - slot.x
+                val dy = pos.y - slot.y
+                dx * dx + dy * dy < 0.0025f
+            }
+            if (taken) usedSlots.add(index)
+        }
+        missing.distinctBy { it.id }.forEach { p ->
+            if (p.id in map) return@forEach
+            val free = formation.slots.indices.firstOrNull { it !in usedSlots }
+            if (free != null) {
+                val slot = formation.slots[free]
+                map[p.id] = Offset(slot.x, slot.y)
+                usedSlots.add(free)
+            } else {
+                map[p.id] = clampField(Offset(p.position.fieldX, p.position.fieldY))
+            }
+        }
+        separateOverlaps(map)
+        _fieldPositions.value = map
+    }
+
+    /** Separa marcadores casi en la misma coordenada (evita el “doble” visual). */
+    private fun separateOverlaps(map: MutableMap<Int, Offset>) {
+        val ids = map.keys.toList()
+        for (i in ids.indices) {
+            for (j in i + 1 until ids.size) {
+                val a = map[ids[i]] ?: continue
+                val b = map[ids[j]] ?: continue
+                val dx = a.x - b.x
+                val dy = a.y - b.y
+                if (dx * dx + dy * dy < 0.0016f) {
+                    map[ids[j]] = clampField(Offset(b.x, (b.y + 0.06f).coerceAtMost(0.90f)))
+                }
+            }
+        }
     }
 
     fun toggleTimer() {
-        if (_ui.value.isRunning) pauseTimer() else startTimer()
+        if (_clock.value.isRunning) pauseTimer() else startTimer()
     }
 
     fun startTimer() {
-        if (_ui.value.isRunning) return
-        _ui.update { it.copy(isRunning = true) }
+        if (_clock.value.isRunning) return
+        val elapsed = _clock.value.elapsedSeconds
+        clockAnchorWallMs = System.currentTimeMillis() - elapsed * 1000L
+        _clock.update { it.copy(isRunning = true) }
+        persistLiveClockAsync(running = true)
         tickerJob?.cancel()
         tickerJob = viewModelScope.launch {
+            var ticksSincePersist = 0
             while (true) {
                 delay(1000)
                 val maxSeconds = (match.value?.durationPerPart ?: 45) * 60
                 val onFieldIds = matchPlayers.value.filter { it.isOnField }.map { it.playerId }.toSet()
                 val sentOffIds = sentOffPlayerIds()
-                val next = _ui.value.elapsedSeconds + 1
-                val newTimes = _ui.value.secondsOnField.toMutableMap()
-                onFieldIds.forEach { id ->
-                    if (id !in sentOffIds) {
-                        newTimes[id] = (newTimes[id] ?: 0) + 1
+                val fromWall = if (clockAnchorWallMs > 0L) {
+                    ((System.currentTimeMillis() - clockAnchorWallMs) / 1000L).toInt()
+                } else {
+                    _clock.value.elapsedSeconds + 1
+                }
+                val next = fromWall.coerceAtMost(maxSeconds)
+                val gained = (next - _clock.value.elapsedSeconds).coerceAtLeast(0)
+                if (gained > 0) {
+                    val newTimes = _fieldSeconds.value.toMutableMap()
+                    onFieldIds.forEach { id ->
+                        if (id !in sentOffIds) {
+                            newTimes[id] = (newTimes[id] ?: 0) + gained
+                        }
                     }
+                    _fieldSeconds.value = newTimes
                 }
                 if (next >= maxSeconds) {
-                    _ui.update {
-                        it.copy(
-                            elapsedSeconds = maxSeconds,
-                            isRunning = false,
-                            secondsOnField = newTimes
-                        )
-                    }
+                    _clock.value = LiveClockState(elapsedSeconds = maxSeconds, isRunning = false)
+                    clockAnchorWallMs = 0L
+                    persistLiveClock(running = false)
                     break
                 } else {
-                    _ui.update {
-                        it.copy(elapsedSeconds = next, secondsOnField = newTimes)
+                    _clock.value = LiveClockState(elapsedSeconds = next, isRunning = true)
+                    ticksSincePersist++
+                    if (ticksSincePersist >= 10) {
+                        ticksSincePersist = 0
+                        persistLiveClock(running = true)
                     }
                 }
             }
@@ -184,19 +399,54 @@ class LiveMatchViewModel(
 
     fun pauseTimer() {
         tickerJob?.cancel()
-        _ui.update { it.copy(isRunning = false) }
+        clockAnchorWallMs = 0L
+        _clock.update { it.copy(isRunning = false) }
+        persistLiveClockAsync(running = false)
     }
 
     fun nextPeriod() {
         val maxParts = match.value?.numParts ?: 2
         if (_ui.value.period >= maxParts) return
         pauseTimer()
-        _ui.update {
-            it.copy(period = it.period + 1, elapsedSeconds = 0, isRunning = false)
+        clockAnchorWallMs = 0L
+        _clock.value = LiveClockState(elapsedSeconds = 0, isRunning = false)
+        _ui.update { it.copy(period = it.period + 1) }
+        persistLiveClockAsync(running = false)
+    }
+
+    private fun persistLiveClockAsync(running: Boolean) {
+        persistJob?.cancel()
+        persistJob = viewModelScope.launch {
+            persistLiveClock(running)
         }
     }
 
-    fun currentMinute(): Int = _ui.value.elapsedSeconds / 60
+    private suspend fun persistLiveClock(running: Boolean) {
+        val m = match.value ?: return
+        if (m.status == MatchStatus.FINISHED) return
+        val elapsed = _clock.value.elapsedSeconds
+        val anchor = if (running) {
+            if (clockAnchorWallMs > 0L) clockAnchorWallMs
+            else System.currentTimeMillis() - elapsed * 1000L
+        } else {
+            0L
+        }
+        if (running) clockAnchorWallMs = anchor
+        matchRepository.updateMatch(
+            m.copy(
+                livePeriod = _ui.value.period,
+                liveElapsedSeconds = elapsed,
+                liveClockRunning = running,
+                liveClockAnchorWallMs = anchor,
+                fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
+                fieldPositionsJson = Match.encodeFieldPositions(
+                    _fieldPositions.value.mapValues { it.value.x to it.value.y }
+                )
+            )
+        )
+    }
+
+    fun currentMinute(): Int = _clock.value.elapsedSeconds / 60
 
     fun setShowJerseyNumbers(value: Boolean) {
         _ui.update { it.copy(showJerseyNumbers = value) }
@@ -212,28 +462,38 @@ class LiveMatchViewModel(
 
     fun movePlayerOnField(playerId: Int, x: Float, y: Float) {
         val drop = clampField(Offset(x, y))
-        _ui.update { state ->
-            val positions = state.fieldPositions.toMutableMap()
-            val origin = positions[playerId] ?: return@update state
+        val positions = _fieldPositions.value.toMutableMap()
+        val origin = positions[playerId] ?: return
 
-            // Solo válido: soltar encima de otro → intercambiar.
-            // Si no hay nadie debajo, vuelve a su posición original.
-            val swapWithId = positions
-                .asSequence()
-                .filter { it.key != playerId }
-                .minByOrNull { distance(it.value, drop) }
-                ?.takeIf { distance(it.value, drop) < SWAP_DISTANCE }
-                ?.key
+        val swapWithId = positions
+            .asSequence()
+            .filter { it.key != playerId }
+            .minByOrNull { distance(it.value, drop) }
+            ?.takeIf { distance(it.value, drop) < SWAP_DISTANCE }
+            ?.key
 
-            if (swapWithId != null) {
-                val otherPos = positions[swapWithId] ?: return@update state
-                positions[playerId] = otherPos
-                positions[swapWithId] = origin
-                state.copy(fieldPositions = positions)
-            } else {
-                // Forzar recompose al origen (por si la UI tenía un displayPos temporal)
-                state.copy(fieldPositions = positions + (playerId to origin))
-            }
+        if (swapWithId != null) {
+            val otherPos = positions[swapWithId] ?: return
+            positions[playerId] = otherPos
+            positions[swapWithId] = origin
+            _fieldPositions.value = positions
+            persistPositionsAsync(positions)
+        } else {
+            _fieldPositions.value = positions + (playerId to origin)
+        }
+    }
+
+    private fun persistPositionsAsync(positions: Map<Int, Offset>) {
+        viewModelScope.launch {
+            val m = match.value ?: return@launch
+            if (m.status == MatchStatus.FINISHED) return@launch
+            matchRepository.updateMatch(
+                m.copy(
+                    fieldPositionsJson = Match.encodeFieldPositions(
+                        positions.mapValues { it.value.x to it.value.y }
+                    )
+                )
+            )
         }
     }
 
@@ -255,14 +515,12 @@ class LiveMatchViewModel(
             } else 0
             val alreadySentOff = playerId != null && isSentOff(playerId)
 
-            // Máximo 2 amarillas; expulsado no recibe más amarillas
             if (type == StatisticType.YELLOW_CARD && (prevYellows >= 2 || alreadySentOff)) {
                 _ui.update {
                     it.copy(lastFeedback = "Ya tiene 2 amarillas (roja)")
                 }
                 return@launch
             }
-            // No acumular varias rojas directas
             if (type == StatisticType.RED_CARD && playerId != null &&
                 events.value.any { it.playerId == playerId && it.type == StatisticType.RED_CARD }
             ) {
@@ -279,7 +537,6 @@ class LiveMatchViewModel(
                     period = _ui.value.period
                 )
             )
-            // Roja / 2ª amarilla: permanece en campo; el cronómetro deja de contar
             val name = playerId?.let { id ->
                 teamPlayers.value.firstOrNull { it.id == id }?.let { p ->
                     p.alias.ifBlank { p.name.split(" ").first() }
@@ -312,7 +569,7 @@ class LiveMatchViewModel(
 
     fun addSubstitution(playerOutId: Int, playerInId: Int) {
         viewModelScope.launch {
-            val outPos = _ui.value.fieldPositions[playerOutId]
+            val outPos = _fieldPositions.value[playerOutId]
             matchRepository.setPlayerOnField(matchId, playerOutId, false)
             matchRepository.setPlayerOnField(matchId, playerInId, true)
             matchRepository.addEvent(
@@ -329,19 +586,18 @@ class LiveMatchViewModel(
                 ?.let { it.alias.ifBlank { it.name.split(" ").first() } } ?: "?"
             val inName = teamPlayers.value.firstOrNull { it.id == playerInId }
                 ?.let { it.alias.ifBlank { it.name.split(" ").first() } } ?: "?"
-            _ui.update { state ->
-                val positions = state.fieldPositions.toMutableMap()
-                positions.remove(playerOutId)
-                val desired = outPos
-                    ?: teamPlayers.value.firstOrNull { it.id == playerInId }
-                        ?.let { Offset(it.position.fieldX, it.position.fieldY) }
-                    ?: Offset(0.5f, 0.5f)
-                positions[playerInId] = clampField(desired)
-                state.copy(
-                    fieldPositions = positions,
-                    lastFeedback = "${currentMinute()}' · Cambio · $outName → $inName"
-                )
+            val positions = _fieldPositions.value.toMutableMap()
+            positions.remove(playerOutId)
+            val desired = outPos
+                ?: teamPlayers.value.firstOrNull { it.id == playerInId }
+                    ?.let { Offset(it.position.fieldX, it.position.fieldY) }
+                ?: Offset(0.5f, 0.5f)
+            positions[playerInId] = clampField(desired)
+            _fieldPositions.value = positions
+            _ui.update {
+                it.copy(lastFeedback = "${currentMinute()}' · Cambio · $outName → $inName")
             }
+            persistPositionsAsync(positions)
         }
     }
 
@@ -370,9 +626,10 @@ class LiveMatchViewModel(
     }
 
     fun eventLabel(event: MatchEvent): String =
-        event.type?.label
-            ?: customStatTypes.value.firstOrNull { it.code == event.typeCode }?.label
-            ?: event.typeCode
+        EventLabels.resolve(
+            event,
+            customStatTypes.value.associate { it.code to it.label }
+        )
 
     fun cardCounts(playerId: Int): Pair<Int, Int> {
         val list = events.value.filter { it.playerId == playerId }
@@ -388,16 +645,13 @@ class LiveMatchViewModel(
             if (last.type == StatisticType.SUBSTITUTION) {
                 last.playerId?.let { matchRepository.setPlayerOnField(matchId, it, true) }
                 last.relatedPlayerId?.let { matchRepository.setPlayerOnField(matchId, it, false) }
-                // Restaurar posiciones aproximadas del cambio
                 val outId = last.playerId
                 val inId = last.relatedPlayerId
                 if (outId != null && inId != null) {
-                    _ui.update { state ->
-                        val positions = state.fieldPositions.toMutableMap()
-                        val inPos = positions.remove(inId)
-                        if (inPos != null) positions[outId] = inPos
-                        state.copy(fieldPositions = positions)
-                    }
+                    val positions = _fieldPositions.value.toMutableMap()
+                    val inPos = positions.remove(inId)
+                    if (inPos != null) positions[outId] = inPos
+                    _fieldPositions.value = positions
                 }
             }
             matchRepository.deleteEvent(last.id)
@@ -409,17 +663,32 @@ class LiveMatchViewModel(
         viewModelScope.launch {
             pauseTimer()
             val m = match.value ?: return@launch
+            val positionsJson = Match.encodeFieldPositions(
+                _fieldPositions.value.mapValues { it.value.x to it.value.y }
+            )
             val finished = if (m.isHome) {
                 m.copy(
                     status = MatchStatus.FINISHED,
                     homeScore = _ui.value.teamGoals,
-                    awayScore = _ui.value.rivalGoals
+                    awayScore = _ui.value.rivalGoals,
+                    livePeriod = _ui.value.period,
+                    liveElapsedSeconds = _clock.value.elapsedSeconds,
+                    liveClockRunning = false,
+                    liveClockAnchorWallMs = 0L,
+                    fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
+                    fieldPositionsJson = positionsJson
                 )
             } else {
                 m.copy(
                     status = MatchStatus.FINISHED,
                     homeScore = _ui.value.rivalGoals,
-                    awayScore = _ui.value.teamGoals
+                    awayScore = _ui.value.teamGoals,
+                    livePeriod = _ui.value.period,
+                    liveElapsedSeconds = _clock.value.elapsedSeconds,
+                    liveClockRunning = false,
+                    liveClockAnchorWallMs = 0L,
+                    fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
+                    fieldPositionsJson = positionsJson
                 )
             }
             matchRepository.finishMatch(finished)
@@ -430,10 +699,35 @@ class LiveMatchViewModel(
     private suspend fun syncScore(teamGoals: Int, rivalGoals: Int) {
         val m = match.value ?: return
         if (m.status == MatchStatus.FINISHED) return
+        val running = _clock.value.isRunning
+        val anchor = if (running) clockAnchorWallMs else 0L
+        val positionsJson = Match.encodeFieldPositions(
+            _fieldPositions.value.mapValues { it.value.x to it.value.y }
+        )
         val updated = if (m.isHome) {
-            m.copy(status = MatchStatus.LIVE, homeScore = teamGoals, awayScore = rivalGoals)
+            m.copy(
+                status = MatchStatus.LIVE,
+                homeScore = teamGoals,
+                awayScore = rivalGoals,
+                livePeriod = _ui.value.period,
+                liveElapsedSeconds = _clock.value.elapsedSeconds,
+                liveClockRunning = running,
+                liveClockAnchorWallMs = anchor,
+                fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
+                fieldPositionsJson = positionsJson
+            )
         } else {
-            m.copy(status = MatchStatus.LIVE, homeScore = rivalGoals, awayScore = teamGoals)
+            m.copy(
+                status = MatchStatus.LIVE,
+                homeScore = rivalGoals,
+                awayScore = teamGoals,
+                livePeriod = _ui.value.period,
+                liveElapsedSeconds = _clock.value.elapsedSeconds,
+                liveClockRunning = running,
+                liveClockAnchorWallMs = anchor,
+                fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
+                fieldPositionsJson = positionsJson
+            )
         }
         matchRepository.updateMatch(updated)
     }
@@ -441,6 +735,28 @@ class LiveMatchViewModel(
     companion object {
         /** Distancia relativa (0..1) para considerar “soltado encima” e intercambiar. */
         private const val SWAP_DISTANCE = 0.12f
+
+        /** Campos de UI: excluye reloj y JSON de posiciones para no reemitir cada tick. */
+        private fun sameMatchForUi(a: Match?, b: Match?): Boolean {
+            if (a === b) return true
+            if (a == null || b == null) return false
+            return a.id == b.id &&
+                a.status == b.status &&
+                a.rival == b.rival &&
+                a.stadium == b.stadium &&
+                a.date == b.date &&
+                a.time == b.time &&
+                a.matchday == b.matchday &&
+                a.isHome == b.isHome &&
+                a.durationPerPart == b.durationPerPart &&
+                a.numParts == b.numParts &&
+                a.formation == b.formation &&
+                a.notes == b.notes &&
+                a.homeScore == b.homeScore &&
+                a.awayScore == b.awayScore &&
+                a.opponentClubId == b.opponentClubId &&
+                a.rivalShieldUri == b.rivalShieldUri
+        }
 
         fun factory(context: Context, matchId: Int, teamId: Int) =
             object : ViewModelProvider.Factory {

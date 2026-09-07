@@ -4,7 +4,6 @@ import com.luis.alhendinfc.data.local.CustomStatTypeDao
 import com.luis.alhendinfc.data.local.CustomStatTypeEntity
 import com.luis.alhendinfc.domain.model.CustomStatAppliesTo
 import com.luis.alhendinfc.domain.model.CustomStatType
-import com.luis.alhendinfc.domain.model.SampleCustomStats
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -37,16 +36,6 @@ class CustomStatTypeRepositoryImpl(
         } else {
             dao.delete(type.toEntity())
         }
-    }
-
-    override suspend fun ensureSampleCustomStats(teamId: Int): Boolean {
-        if (teamId <= 0) return false
-        val existing = dao.getCodesByTeam(teamId).toSet()
-        val missing = SampleCustomStats.createTypes(teamId)
-            .filter { it.code !in existing }
-        if (missing.isEmpty()) return false
-        dao.insertAll(missing.map { it.toEntity() })
-        return true
     }
 
     private fun CustomStatTypeEntity.toDomain() = CustomStatType(

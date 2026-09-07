@@ -1,7 +1,6 @@
 package com.luis.alhendinfc.ui.players
 
-import android.graphics.BitmapFactory
-import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
@@ -44,12 +43,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size as GeomSize
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -58,8 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.home.TeamAvatar
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 
 @Composable
 fun PlayerListScreen(
@@ -192,18 +188,7 @@ private fun PlayerCard(
     var bitmap by remember(player.photoUri) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(player.photoUri) {
-        val uri = player.photoUri
-        if (uri != null) {
-            bitmap = withContext(Dispatchers.IO) {
-                try {
-                    context.contentResolver.openInputStream(Uri.parse(uri))?.use { stream ->
-                        BitmapFactory.decodeStream(stream)?.asImageBitmap()
-                    }
-                } catch (e: Exception) { null }
-            }
-        } else {
-            bitmap = null
-        }
+        bitmap = LocalImageLoader.load(context, player.photoUri, maxSidePx = 256)
     }
 
     Card(

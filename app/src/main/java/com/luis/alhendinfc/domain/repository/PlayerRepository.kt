@@ -9,6 +9,4 @@ interface PlayerRepository {
     suspend fun addPlayer(player: Player)
     suspend fun updatePlayer(player: Player)
     suspend fun deletePlayer(player: Player)
-    /** Si el equipo no tiene jugadores, inserta la plantilla de prueba (18). */
-    suspend fun ensureSampleSquad(teamId: Int): Boolean
 }

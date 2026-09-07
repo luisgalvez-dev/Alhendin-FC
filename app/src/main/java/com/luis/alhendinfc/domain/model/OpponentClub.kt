@@ -7,6 +7,8 @@ data class OpponentClub(
     val shortName: String = "",
     val stadium: String = "",
     val shieldUri: String? = null,
+    /** Texto libre: color(es) de la equipación. */
+    val kitColors: String = "",
     val sortOrder: Int = 0
 ) {
     val displayShort: String get() = shortName.ifBlank { name.take(12) }
