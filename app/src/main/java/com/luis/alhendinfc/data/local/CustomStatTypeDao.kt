@@ -38,8 +38,14 @@ interface CustomStatTypeDao {
     @Delete
     suspend fun delete(entity: CustomStatTypeEntity)
 
-    @Query("SELECT COUNT(*) FROM match_event WHERE typeCode = :typeCode")
-    suspend fun countEventsWithCode(typeCode: String): Int
+    @Query(
+        """
+        SELECT COUNT(*) FROM match_event e
+        INNER JOIN match_table m ON m.id = e.matchId
+        WHERE e.typeCode = :typeCode AND m.teamId = :teamId
+        """
+    )
+    suspend fun countEventsWithCode(typeCode: String, teamId: Int): Int
 
     @Query("SELECT COUNT(*) FROM custom_stat_type WHERE teamId = :teamId")
     suspend fun countByTeam(teamId: Int): Int

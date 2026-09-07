@@ -102,6 +102,7 @@ fun TeamScreen(
         ) {
             TeamInfoPanel(
                 team = team,
+                playerCount = playerCount,
                 onEditClick = { showEditDialog = true },
                 modifier = Modifier
                     .weight(0.38f)
@@ -122,6 +123,7 @@ fun TeamScreen(
 @Composable
 private fun TeamInfoPanel(
     team: Team?,
+    playerCount: Int,
     onEditClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -191,7 +193,7 @@ private fun TeamInfoPanel(
                 Spacer(modifier = Modifier.height(12.dp))
                 TeamInfoRow(label = "Temporada", value = team.season.ifBlank { "—" })
                 Spacer(modifier = Modifier.height(12.dp))
-                TeamInfoRow(label = "Jugadores", value = "0")
+                TeamInfoRow(label = "Jugadores", value = playerCount.toString())
 
                 Spacer(modifier = Modifier.weight(1f))
 

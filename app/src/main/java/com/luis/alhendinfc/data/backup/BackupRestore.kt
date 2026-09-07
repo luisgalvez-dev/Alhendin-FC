@@ -1,0 +1,81 @@
+package com.luis.alhendinfc.data.backup
+
+import com.luis.alhendinfc.data.local.AlhendinDatabase
+import androidx.room.withTransaction
+
+/**
+ * Sustitución atómica de la BD: wipe + insert + verificación de conteos
+ * ocurren en la misma transacción Room. Si cualquier paso lanza,
+ * SQLite deshace el wipe y los inserts parciales.
+ */
+internal interface BackupMutator {
+    suspend fun <R> inTransaction(block: suspend () -> R): R
+    suspend fun deleteAllRows()
+    suspend fun insertBackup(payload: ValidatedBackup)
+    suspend fun readCounts(): BackupCounts
+}
+
+internal suspend fun commitValidatedBackup(
+    mutator: BackupMutator,
+    payload: ValidatedBackup
+) {
+    mutator.inTransaction {
+        mutator.deleteAllRows()
+        mutator.insertBackup(payload)
+        val actual = mutator.readCounts()
+        check(actual == payload.counts) {
+            "La restauración no coincide con el backup (esperado=${payload.counts}, actual=$actual)"
+        }
+        actual
+    }
+}
+
+internal class RoomBackupMutator(
+    private val db: AlhendinDatabase
+) : BackupMutator {
+
+    override suspend fun <R> inTransaction(block: suspend () -> R): R =
+        db.withTransaction(block)
+
+    override suspend fun deleteAllRows() {
+        val sql = db.openHelper.writableDatabase
+        BackupRepository.ALL_TABLES.forEach { table ->
+            sql.execSQL("DELETE FROM `$table`")
+        }
+    }
+
+    override suspend fun insertBackup(payload: ValidatedBackup) {
+        if (payload.teams.isNotEmpty()) db.teamDao().insertAll(payload.teams)
+        if (payload.players.isNotEmpty()) db.playerDao().insertAll(payload.players)
+        if (payload.matches.isNotEmpty()) db.matchDao().insertMatches(payload.matches)
+        if (payload.matchPlayers.isNotEmpty()) db.matchDao().insertMatchPlayers(payload.matchPlayers)
+        if (payload.events.isNotEmpty()) db.matchEventDao().insertAll(payload.events)
+        if (payload.customStatTypes.isNotEmpty()) db.customStatTypeDao().replaceAll(payload.customStatTypes)
+        if (payload.opponentClubs.isNotEmpty()) db.opponentClubDao().replaceAll(payload.opponentClubs)
+        if (payload.fixtures.isNotEmpty()) db.seasonFixtureDao().replaceAll(payload.fixtures)
+        fixSqliteSequences()
+    }
+
+    override suspend fun readCounts(): BackupCounts = BackupCounts(
+        teams = db.teamDao().getAllOnce().size,
+        players = db.playerDao().getAllOnce().size,
+        matches = db.matchDao().getAllMatchesOnce().size,
+        matchPlayers = db.matchDao().getAllMatchPlayersOnce().size,
+        events = db.matchEventDao().getAllOnce().size,
+        customStatTypes = db.customStatTypeDao().getAllOnce().size,
+        opponentClubs = db.opponentClubDao().getAllOnce().size,
+        fixtures = db.seasonFixtureDao().getAllOnce().size
+    )
+
+    private fun fixSqliteSequences() {
+        val sqlDb = db.openHelper.writableDatabase
+        BackupRepository.ALL_TABLES.forEach { table ->
+            sqlDb.execSQL("DELETE FROM sqlite_sequence WHERE name = ?", arrayOf(table))
+            sqlDb.execSQL(
+                "INSERT INTO sqlite_sequence(name, seq) " +
+                    "SELECT ?, IFNULL(MAX(id), 0) FROM $table",
+                arrayOf(table)
+            )
+        }
+    }
+}

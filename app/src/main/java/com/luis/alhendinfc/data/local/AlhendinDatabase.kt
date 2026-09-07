@@ -6,7 +6,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import java.util.concurrent.Executors
 
 @Database(
     entities = [
@@ -20,7 +19,7 @@ import java.util.concurrent.Executors
         SeasonFixtureEntity::class
     ],
     version = 14,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AlhendinDatabase : RoomDatabase() {
 
@@ -33,6 +32,9 @@ abstract class AlhendinDatabase : RoomDatabase() {
     abstract fun seasonFixtureDao(): SeasonFixtureDao
 
     companion object {
+        const val VERSION = 14
+        const val NAME = "alhendin_db"
+
         @Volatile
         private var INSTANCE: AlhendinDatabase? = null
 
@@ -114,11 +116,10 @@ abstract class AlhendinDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): AlhendinDatabase {
             return INSTANCE ?: synchronized(this) {
-                val app = context.applicationContext
                 Room.databaseBuilder(
-                    app,
+                    context.applicationContext,
                     AlhendinDatabase::class.java,
-                    "alhendin_db"
+                    NAME
                 )
                     .addMigrations(
                         MIGRATION_8_9,
@@ -128,28 +129,11 @@ abstract class AlhendinDatabase : RoomDatabase() {
                         MIGRATION_12_13,
                         MIGRATION_13_14
                     )
-                    .fallbackToDestructiveMigration(dropAllTables = true)
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
-                    .also { db ->
-                        // Una sola vez: vaciar datos de prueba antiguos (plantilla/jornadas seed).
-                        // clearAllTables() NO puede ejecutarse en el hilo principal.
-                        val prefs = app.getSharedPreferences("alhendin_meta", Context.MODE_PRIVATE)
-                        if (!prefs.getBoolean(KEY_CLEARED_DEMO, false)) {
-                            val executor = Executors.newSingleThreadExecutor()
-                            try {
-                                executor.submit { db.clearAllTables() }.get()
-                            } finally {
-                                executor.shutdown()
-                            }
-                            prefs.edit().putBoolean(KEY_CLEARED_DEMO, true).apply()
-                        }
-                        INSTANCE = db
-                    }
+                    .also { INSTANCE = it }
             }
         }
-
-        private const val KEY_CLEARED_DEMO = "cleared_demo_data_v1"
 
         /** Reinicia la instancia (tras importar backup). */
         fun resetInstance() {

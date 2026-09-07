@@ -17,6 +17,7 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -61,8 +62,92 @@ class BackupRepository(
     }
 
     suspend fun exportToUri(destUri: Uri): BackupSummary = withContext(Dispatchers.IO) {
+        context.contentResolver.openOutputStream(destUri)?.use { os ->
+            writeBackupToStream(os)
+        } ?: error("No se pudo escribir el archivo de backup")
+    }
+
+    suspend fun importFromUri(sourceUri: Uri): BackupSummary = withContext(Dispatchers.IO) {
+        val extractDir = File(context.cacheDir, "backup_import").also {
+            it.deleteRecursively()
+            it.mkdirs()
+        }
+        var incomingTag: String? = null
+        try {
+            context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                ZipInputStream(BufferedInputStream(input)).use { zip ->
+                    var entry = zip.nextEntry
+                    while (entry != null) {
+                        val name = entry.name
+                        if (!entry.isDirectory &&
+                            (name == "backup.json" ||
+                                name.startsWith("media/") ||
+                                name.startsWith("database/"))
+                        ) {
+                            val out = File(extractDir, name)
+                            out.parentFile?.mkdirs()
+                            FileOutputStream(out).use { zip.copyTo(it) }
+                        }
+                        zip.closeEntry()
+                        entry = zip.nextEntry
+                    }
+                }
+            } ?: error("No se pudo leer el backup")
+
+            val jsonFile = File(extractDir, "backup.json")
+            if (!jsonFile.exists()) error("El ZIP no contiene backup.json")
+
+            val payload = BackupValidator.validateJson(
+                jsonFile.readText(Charsets.UTF_8),
+                SCHEMA_VERSION
+            )
+
+            writeSafetyBackup()
+
+            incomingTag = "restore_${System.currentTimeMillis()}"
+            val mediaMap = copyIncomingMedia(extractDir, incomingTag)
+            val resolved = payload.withResolvedUris { value ->
+                if (value.isNullOrBlank()) null else mediaMap[value] ?: value
+            }
+
+            try {
+                val db = AlhendinDatabase.getInstance(context)
+                commitValidatedBackup(RoomBackupMutator(db), resolved)
+                homePrefs.restoreEncodedLayout(resolved.homeLayout)
+            } catch (t: Throwable) {
+                incomingTag?.let { deleteTaggedMedia(it) }
+                throw t
+            }
+
+            BackupSummary(
+                teams = resolved.counts.teams,
+                players = resolved.counts.players,
+                matches = resolved.counts.matches,
+                matchPlayers = resolved.counts.matchPlayers,
+                events = resolved.counts.events,
+                customStatTypes = resolved.counts.customStatTypes,
+                opponentClubs = resolved.counts.opponentClubs,
+                fixtures = resolved.counts.fixtures,
+                mediaFiles = mediaMap.size
+            )
+        } finally {
+            extractDir.deleteRecursively()
+        }
+    }
+
+    private suspend fun writeSafetyBackup() {
+        val dir = File(context.filesDir, SAFETY_DIR).apply { mkdirs() }
+        val file = File(dir, "pre_restore_${System.currentTimeMillis()}.zip")
+        FileOutputStream(file).use { writeBackupToStream(it) }
+        dir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith("pre_restore_") }
+            ?.sortedByDescending { it.lastModified() }
+            ?.drop(SAFETY_KEEP)
+            ?.forEach { it.delete() }
+    }
+
+    private suspend fun writeBackupToStream(os: OutputStream): BackupSummary {
         val db = AlhendinDatabase.getInstance(context)
-        // Asegura que lo escrito en WAL esté en el fichero (por si también copiamos la BD).
         db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close()
 
         val mediaDir = File(context.cacheDir, "backup_export_media").also {
@@ -133,45 +218,42 @@ class BackupRepository(
             .put("opponentClubs", clubsToJson(clubs))
             .put("fixtures", fixturesToJson(fixtures))
 
-        val dbFile = context.getDatabasePath("alhendin_db")
+        val dbFile = context.getDatabasePath(AlhendinDatabase.NAME)
         val walFile = File(dbFile.path + "-wal")
         val shmFile = File(dbFile.path + "-shm")
 
-        context.contentResolver.openOutputStream(destUri)?.use { os ->
-            ZipOutputStream(BufferedOutputStream(os)).use { zip ->
-                zip.putNextEntry(ZipEntry("backup.json"))
-                zip.write(root.toString().toByteArray(Charsets.UTF_8))
+        ZipOutputStream(BufferedOutputStream(os)).use { zip ->
+            zip.putNextEntry(ZipEntry("backup.json"))
+            zip.write(root.toString().toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+
+            if (dbFile.exists()) {
+                zip.putNextEntry(ZipEntry("database/alhendin_db"))
+                dbFile.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
-
-                // Copia binaria completa de la BD (todas las tablas, byte a byte).
-                if (dbFile.exists()) {
-                    zip.putNextEntry(ZipEntry("database/alhendin_db"))
-                    dbFile.inputStream().use { it.copyTo(zip) }
-                    zip.closeEntry()
-                }
-                if (walFile.exists() && walFile.length() > 0) {
-                    zip.putNextEntry(ZipEntry("database/alhendin_db-wal"))
-                    walFile.inputStream().use { it.copyTo(zip) }
-                    zip.closeEntry()
-                }
-                if (shmFile.exists() && shmFile.length() > 0) {
-                    zip.putNextEntry(ZipEntry("database/alhendin_db-shm"))
-                    shmFile.inputStream().use { it.copyTo(zip) }
-                    zip.closeEntry()
-                }
-
-                mediaDir.listFiles()?.forEach { file ->
-                    zip.putNextEntry(ZipEntry("media/${file.name}"))
-                    file.inputStream().use { it.copyTo(zip) }
-                    zip.closeEntry()
-                }
             }
-        } ?: error("No se pudo escribir el archivo de backup")
+            if (walFile.exists() && walFile.length() > 0) {
+                zip.putNextEntry(ZipEntry("database/alhendin_db-wal"))
+                walFile.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+            if (shmFile.exists() && shmFile.length() > 0) {
+                zip.putNextEntry(ZipEntry("database/alhendin_db-shm"))
+                shmFile.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+
+            mediaDir.listFiles()?.forEach { file ->
+                zip.putNextEntry(ZipEntry("media/${file.name}"))
+                file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
+        }
 
         val mediaCount = mediaDir.listFiles()?.size ?: 0
         mediaDir.deleteRecursively()
 
-        BackupSummary(
+        return BackupSummary(
             teams = teams.size,
             players = players.size,
             matches = matches.size,
@@ -184,42 +266,12 @@ class BackupRepository(
         )
     }
 
-    suspend fun importFromUri(sourceUri: Uri): BackupSummary = withContext(Dispatchers.IO) {
-        val extractDir = File(context.cacheDir, "backup_import").also {
-            it.deleteRecursively()
-            it.mkdirs()
-        }
-        context.contentResolver.openInputStream(sourceUri)?.use { input ->
-            ZipInputStream(BufferedInputStream(input)).use { zip ->
-                var entry = zip.nextEntry
-                while (entry != null) {
-                    val name = entry.name
-                    if (!entry.isDirectory &&
-                        (name == "backup.json" ||
-                            name.startsWith("media/") ||
-                            name.startsWith("database/"))
-                    ) {
-                        val out = File(extractDir, name)
-                        out.parentFile?.mkdirs()
-                        FileOutputStream(out).use { zip.copyTo(it) }
-                    }
-                    zip.closeEntry()
-                    entry = zip.nextEntry
-                }
-            }
-        } ?: error("No se pudo leer el backup")
-
-        val jsonFile = File(extractDir, "backup.json")
-        if (!jsonFile.exists()) error("El ZIP no contiene backup.json")
-        val root = JSONObject(jsonFile.readText(Charsets.UTF_8))
-
-        val mediaOut = File(context.filesDir, "backup_media").also {
-            it.mkdirs()
-        }
+    private fun copyIncomingMedia(extractDir: File, tag: String): Map<String, String> {
+        val mediaOut = File(context.filesDir, "backup_media").also { it.mkdirs() }
         val mediaMap = mutableMapOf<String, String>()
         File(extractDir, "media").listFiles()?.forEach { file ->
-            val dest = File(mediaOut, file.name)
-            file.copyTo(dest, overwrite = true)
+            val dest = File(mediaOut, "${tag}_${file.name}")
+            file.copyTo(dest, overwrite = false)
             val contentUri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
@@ -227,77 +279,18 @@ class BackupRepository(
             ).toString()
             mediaMap["media/${file.name}"] = contentUri
         }
-
-        fun resolveUri(value: String?): String? {
-            if (value.isNullOrBlank()) return null
-            return mediaMap[value] ?: value
-        }
-
-        val teams = parseTeams(root.arrayOrEmpty("teams")).map {
-            it.copy(shieldUri = resolveUri(it.shieldUri))
-        }
-        val players = parsePlayers(root.arrayOrEmpty("players")).map {
-            it.copy(photoUri = resolveUri(it.photoUri))
-        }
-        val matches = parseMatches(root.arrayOrEmpty("matches")).map {
-            it.copy(rivalShieldUri = resolveUri(it.rivalShieldUri))
-        }
-        val matchPlayers = parseMatchPlayers(root.arrayOrEmpty("matchPlayers"))
-        val events = parseEvents(root.arrayOrEmpty("events"))
-        val customStats = parseCustomStats(root.arrayOrEmpty("customStatTypes"))
-        val clubs = parseClubs(root.arrayOrEmpty("opponentClubs")).map {
-            it.copy(shieldUri = resolveUri(it.shieldUri))
-        }
-        val fixtures = parseFixtures(root.arrayOrEmpty("fixtures"))
-        val homeLayout = if (root.has("homeLayout") && !root.isNull("homeLayout")) {
-            root.getString("homeLayout")
-        } else {
-            null
-        }
-
-        AlhendinDatabase.resetInstance()
-        val db = AlhendinDatabase.getInstance(context)
-        db.clearAllTables()
-        if (teams.isNotEmpty()) db.teamDao().insertAll(teams)
-        if (players.isNotEmpty()) db.playerDao().insertAll(players)
-        if (matches.isNotEmpty()) db.matchDao().insertMatches(matches)
-        if (matchPlayers.isNotEmpty()) db.matchDao().insertMatchPlayers(matchPlayers)
-        if (events.isNotEmpty()) db.matchEventDao().insertAll(events)
-        if (customStats.isNotEmpty()) db.customStatTypeDao().replaceAll(customStats)
-        if (clubs.isNotEmpty()) db.opponentClubDao().replaceAll(clubs)
-        if (fixtures.isNotEmpty()) db.seasonFixtureDao().replaceAll(fixtures)
-        fixSqliteSequences(db)
-        homePrefs.restoreEncodedLayout(homeLayout)
-
-        extractDir.deleteRecursively()
-
-        BackupSummary(
-            teams = teams.size,
-            players = players.size,
-            matches = matches.size,
-            matchPlayers = matchPlayers.size,
-            events = events.size,
-            customStatTypes = customStats.size,
-            opponentClubs = clubs.size,
-            fixtures = fixtures.size,
-            mediaFiles = mediaMap.size
-        )
+        return mediaMap
     }
 
-    private fun fixSqliteSequences(db: AlhendinDatabase) {
-        val sqlDb = db.openHelper.writableDatabase
-        ALL_TABLES.forEach { table ->
-            sqlDb.execSQL("DELETE FROM sqlite_sequence WHERE name = ?", arrayOf(table))
-            sqlDb.execSQL(
-                "INSERT INTO sqlite_sequence(name, seq) " +
-                    "SELECT ?, IFNULL(MAX(id), 0) FROM $table",
-                arrayOf(table)
-            )
-        }
+    private fun deleteTaggedMedia(tag: String) {
+        val mediaOut = File(context.filesDir, "backup_media")
+        mediaOut.listFiles()?.filter { it.name.startsWith("${tag}_") }?.forEach { it.delete() }
     }
 
     companion object {
-        const val SCHEMA_VERSION = 14
+        const val SCHEMA_VERSION = AlhendinDatabase.VERSION
+        private const val SAFETY_DIR = "safety_backups"
+        private const val SAFETY_KEEP = 5
 
         /** Todas las tablas Room de la app (estadísticas = matches + events + match_player). */
         val ALL_TABLES = listOf(
@@ -318,9 +311,6 @@ class BackupRepository(
             )
     }
 }
-
-private fun JSONObject.arrayOrEmpty(key: String): JSONArray =
-    if (has(key) && !isNull(key)) getJSONArray(key) else JSONArray()
 
 private fun teamsToJson(list: List<TeamEntity>) = JSONArray().also { arr ->
     list.forEach { t ->
@@ -462,177 +452,6 @@ private fun fixturesToJson(list: List<SeasonFixtureEntity>) = JSONArray().also {
                 .put("date", f.date)
                 .put("time", f.time)
                 .put("stadiumOverride", f.stadiumOverride)
-        )
-    }
-}
-
-private fun JSONObject.optNullableInt(key: String): Int? {
-    if (!has(key) || isNull(key)) return null
-    return optInt(key)
-}
-
-private fun JSONObject.optNullableString(key: String): String? {
-    if (!has(key) || isNull(key)) return null
-    val value = optString(key)
-    return value.takeIf { it.isNotBlank() && it != "null" }
-}
-
-private fun parseTeams(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            TeamEntity(
-                id = o.getInt("id"),
-                name = o.optString("name"),
-                category = o.optString("category"),
-                season = o.optString("season"),
-                shieldUri = o.optNullableString("shieldUri"),
-                isSelected = o.optBoolean("isSelected", false)
-            )
-        )
-    }
-}
-
-private fun parsePlayers(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            PlayerEntity(
-                id = o.getInt("id"),
-                teamId = o.getInt("teamId"),
-                name = o.optString("name"),
-                alias = o.optString("alias"),
-                position = o.optString("position", "MEDIOCENTRO_DEFENSIVO"),
-                jerseyNumber = o.optInt("jerseyNumber"),
-                photoUri = o.optNullableString("photoUri"),
-                height = o.optInt("height"),
-                weight = o.optInt("weight"),
-                laterality = o.optString("laterality", "DERECHA"),
-                isActive = o.optBoolean("isActive", true),
-                observations = o.optString("observations")
-            )
-        )
-    }
-}
-
-private fun parseMatches(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            MatchEntity(
-                id = o.getInt("id"),
-                teamId = o.getInt("teamId"),
-                rival = o.optString("rival"),
-                stadium = o.optString("stadium"),
-                date = o.optString("date"),
-                time = o.optString("time"),
-                matchday = o.optInt("matchday", 1),
-                isHome = o.optBoolean("isHome", true),
-                durationPerPart = o.optInt("durationPerPart", 45),
-                numParts = o.optInt("numParts", 2),
-                formation = o.optString("formation"),
-                notes = o.optString("notes"),
-                status = o.optString("status", "OPEN"),
-                homeScore = o.optNullableInt("homeScore"),
-                awayScore = o.optNullableInt("awayScore"),
-                opponentClubId = o.optNullableInt("opponentClubId"),
-                rivalShieldUri = o.optNullableString("rivalShieldUri"),
-                livePeriod = o.optInt("livePeriod", 1),
-                liveElapsedSeconds = o.optInt("liveElapsedSeconds", 0),
-                liveClockRunning = o.optBoolean("liveClockRunning", false),
-                liveClockAnchorWallMs = o.optLong("liveClockAnchorWallMs", 0L),
-                fieldSecondsJson = o.optString("fieldSecondsJson", ""),
-                fieldPositionsJson = o.optString("fieldPositionsJson", "")
-            )
-        )
-    }
-}
-
-private fun parseMatchPlayers(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            MatchPlayerEntity(
-                id = o.getInt("id"),
-                matchId = o.getInt("matchId"),
-                playerId = o.getInt("playerId"),
-                callupStatus = o.optString("callupStatus", "NONE"),
-                isOnField = o.optBoolean("isOnField", false)
-            )
-        )
-    }
-}
-
-private fun parseEvents(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            MatchEventEntity(
-                id = o.getInt("id"),
-                matchId = o.getInt("matchId"),
-                typeCode = o.optString("typeCode"),
-                playerId = o.optNullableInt("playerId"),
-                relatedPlayerId = o.optNullableInt("relatedPlayerId"),
-                minute = o.optInt("minute"),
-                period = o.optInt("period", 1),
-                value = o.optInt("value", 1),
-                createdAt = o.optLong("createdAt", System.currentTimeMillis())
-            )
-        )
-    }
-}
-
-private fun parseCustomStats(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            CustomStatTypeEntity(
-                id = o.getInt("id"),
-                teamId = o.getInt("teamId"),
-                code = o.optString("code"),
-                label = o.optString("label"),
-                shortLabel = o.optString("shortLabel"),
-                appliesTo = o.optString("appliesTo", "ALL"),
-                sortOrder = o.optInt("sortOrder"),
-                isActive = o.optBoolean("isActive", true),
-                createdAt = o.optLong("createdAt", System.currentTimeMillis())
-            )
-        )
-    }
-}
-
-private fun parseClubs(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            OpponentClubEntity(
-                id = o.getInt("id"),
-                teamId = o.getInt("teamId"),
-                name = o.optString("name"),
-                shortName = o.optString("shortName"),
-                stadium = o.optString("stadium"),
-                shieldUri = o.optNullableString("shieldUri"),
-                kitColors = o.optString("kitColors"),
-                sortOrder = o.optInt("sortOrder")
-            )
-        )
-    }
-}
-
-private fun parseFixtures(arr: JSONArray) = buildList {
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        add(
-            SeasonFixtureEntity(
-                id = o.getInt("id"),
-                teamId = o.getInt("teamId"),
-                matchday = o.getInt("matchday"),
-                opponentClubId = o.getInt("opponentClubId"),
-                isHome = o.optBoolean("isHome", true),
-                date = o.optString("date"),
-                time = o.optString("time"),
-                stadiumOverride = o.optString("stadiumOverride")
-            )
         )
     }
 }

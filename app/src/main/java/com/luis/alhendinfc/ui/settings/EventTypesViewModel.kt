@@ -71,6 +71,7 @@ class EventTypesViewModel(
                 _backupMessage.value = BackupUiMessage(
                     text = summary.asMessage(
                         "Datos restaurados (incluye eventos y estadísticas). " +
+                            "Se guardó una copia previa automática. " +
                             "Cierra la app por completo y vuelve a abrirla."
                     ),
                     requireRestart = true

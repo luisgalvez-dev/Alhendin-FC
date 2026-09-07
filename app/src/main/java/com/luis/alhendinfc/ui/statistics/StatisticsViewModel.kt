@@ -5,15 +5,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.local.AlhendinDatabase
-import com.luis.alhendinfc.domain.model.CustomStatAppliesTo
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchStatus
-import com.luis.alhendinfc.domain.model.PlayerCustomStatCount
 import com.luis.alhendinfc.domain.model.PlayerSeasonStats
-import com.luis.alhendinfc.domain.model.StatisticType
 import com.luis.alhendinfc.domain.repository.CustomStatTypeRepositoryImpl
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.PlayerRepositoryImpl
+import com.luis.alhendinfc.domain.stats.SeasonStatsCalculator
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -31,52 +29,21 @@ class StatisticsViewModel(
         playerRepository.getPlayersByTeam(teamId),
         matchRepository.getTeamEvents(teamId),
         matchRepository.getFinishedCallupsByTeam(teamId),
-        customStatTypeRepository.getByTeam(teamId)
-    ) { players, events, callups, customTypes ->
-        // events ya vienen filtrados a partidos FINISHED desde Room
-        val playerCustomTypes = customTypes
-            .filter { it.appliesTo != CustomStatAppliesTo.RIVAL }
-            .sortedBy { it.sortOrder }
+        customStatTypeRepository.getByTeam(teamId),
+        matchRepository.getMatchesByTeam(teamId)
+    ) { players, events, callups, customTypes, matches ->
+        val teamMatchIds = matches
+            .filter { it.teamId == teamId && it.status == MatchStatus.FINISHED }
+            .map { it.id }
+            .toSet()
 
         players.map { player ->
-            val playerEvents = events.filter { it.playerId == player.id }
-            val yellow = playerEvents
-                .filter { it.type == StatisticType.YELLOW_CARD }
-                .sumOf { it.value }
-            val redDirect = playerEvents
-                .filter { it.type == StatisticType.RED_CARD }
-                .sumOf { it.value }
-            val redFromYellow = if (yellow >= 2) 1 else 0
-
-            val customStats = playerCustomTypes
-                .filter { type ->
-                    type.appliesTo.matches(player.position) ||
-                        playerEvents.any { it.typeCode == type.code }
-                }
-                .filter { type -> type.isActive || playerEvents.any { it.typeCode == type.code } }
-                .map { type ->
-                    PlayerCustomStatCount(
-                        code = type.code,
-                        label = type.label,
-                        shortLabel = type.shortLabel.ifBlank { type.label },
-                        value = playerEvents
-                            .filter { it.typeCode == type.code }
-                            .sumOf { it.value }
-                    )
-                }
-
-            PlayerSeasonStats(
+            SeasonStatsCalculator.forPlayer(
                 player = player,
-                matchesPlayed = callups
-                    .filter { it.playerId == player.id }
-                    .map { it.matchId }
-                    .distinct()
-                    .size,
-                goals = playerEvents.filter { it.type == StatisticType.GOAL }.sumOf { it.value },
-                assists = playerEvents.filter { it.type == StatisticType.ASSIST }.sumOf { it.value },
-                yellowCards = yellow,
-                redCards = maxOf(redDirect, redFromYellow),
-                customStats = customStats
+                events = events,
+                callups = callups,
+                customTypes = customTypes,
+                teamMatchIds = teamMatchIds
             )
         }.sortedWith(
             compareByDescending<PlayerSeasonStats> { it.goals }

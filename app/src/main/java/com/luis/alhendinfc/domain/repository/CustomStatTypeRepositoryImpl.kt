@@ -30,7 +30,7 @@ class CustomStatTypeRepositoryImpl(
     }
 
     override suspend fun deleteOrDeactivate(type: CustomStatType) {
-        val used = dao.countEventsWithCode(type.code)
+        val used = dao.countEventsWithCode(type.code, type.teamId)
         if (used > 0) {
             dao.update(type.copy(isActive = false).toEntity())
         } else {
