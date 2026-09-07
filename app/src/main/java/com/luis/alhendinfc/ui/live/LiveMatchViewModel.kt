@@ -104,6 +104,8 @@ class LiveMatchViewModel(
     private var lastSyncedRivalGoals = -1
     /** Ancla de pared mientras el cronómetro corre: elapsed ≈ (now - anchor) / 1000. */
     private var clockAnchorWallMs: Long = 0L
+    /** Una vez true, no se escriben campos de live (evita races al terminar). */
+    private var finishing = false
 
     init {
         viewModelScope.launch {
@@ -112,19 +114,6 @@ class LiveMatchViewModel(
                 started = true
                 if (m.status == MatchStatus.OPEN) {
                     matchRepository.startLiveMatch(matchId)
-                    matchRepository.updateMatch(
-                        m.copy(
-                            status = MatchStatus.LIVE,
-                            homeScore = 0,
-                            awayScore = 0,
-                            livePeriod = 1,
-                            liveElapsedSeconds = 0,
-                            liveClockRunning = false,
-                            liveClockAnchorWallMs = 0L,
-                            fieldSecondsJson = "",
-                            fieldPositionsJson = ""
-                        )
-                    )
                     _ui.update { it.copy(teamGoals = 0, rivalGoals = 0, period = 1, ready = true) }
                     _clock.value = LiveClockState(elapsedSeconds = 0, isRunning = false)
                     _fieldSeconds.value = emptyMap()
@@ -237,10 +226,12 @@ class LiveMatchViewModel(
         val wasRunning = _clock.value.isRunning
         tickerJob?.cancel()
         persistJob?.cancel()
-        // No bloquear el hilo principal al salir del partido.
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-            withContext(NonCancellable) {
-                persistLiveClock(running = wasRunning)
+        if (!finishing) {
+            // No bloquear el hilo principal al salir del partido.
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                withContext(NonCancellable) {
+                    persistLiveClock(running = wasRunning)
+                }
             }
         }
         super.onCleared()
@@ -351,7 +342,7 @@ class LiveMatchViewModel(
     }
 
     fun startTimer() {
-        if (_clock.value.isRunning) return
+        if (finishing || _clock.value.isRunning) return
         val elapsed = _clock.value.elapsedSeconds
         clockAnchorWallMs = System.currentTimeMillis() - elapsed * 1000L
         _clock.update { it.copy(isRunning = true) }
@@ -401,7 +392,7 @@ class LiveMatchViewModel(
         tickerJob?.cancel()
         clockAnchorWallMs = 0L
         _clock.update { it.copy(isRunning = false) }
-        persistLiveClockAsync(running = false)
+        if (!finishing) persistLiveClockAsync(running = false)
     }
 
     fun nextPeriod() {
@@ -415,6 +406,7 @@ class LiveMatchViewModel(
     }
 
     private fun persistLiveClockAsync(running: Boolean) {
+        if (finishing) return
         persistJob?.cancel()
         persistJob = viewModelScope.launch {
             persistLiveClock(running)
@@ -422,8 +414,7 @@ class LiveMatchViewModel(
     }
 
     private suspend fun persistLiveClock(running: Boolean) {
-        val m = match.value ?: return
-        if (m.status == MatchStatus.FINISHED) return
+        if (finishing) return
         val elapsed = _clock.value.elapsedSeconds
         val anchor = if (running) {
             if (clockAnchorWallMs > 0L) clockAnchorWallMs
@@ -432,17 +423,13 @@ class LiveMatchViewModel(
             0L
         }
         if (running) clockAnchorWallMs = anchor
-        matchRepository.updateMatch(
-            m.copy(
-                livePeriod = _ui.value.period,
-                liveElapsedSeconds = elapsed,
-                liveClockRunning = running,
-                liveClockAnchorWallMs = anchor,
-                fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
-                fieldPositionsJson = Match.encodeFieldPositions(
-                    _fieldPositions.value.mapValues { it.value.x to it.value.y }
-                )
-            )
+        matchRepository.updateLiveClock(
+            matchId = matchId,
+            elapsedSeconds = elapsed,
+            running = running,
+            anchorWallMs = anchor,
+            period = _ui.value.period,
+            fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value)
         )
     }
 
@@ -484,14 +471,13 @@ class LiveMatchViewModel(
     }
 
     private fun persistPositionsAsync(positions: Map<Int, Offset>) {
+        if (finishing) return
         viewModelScope.launch {
-            val m = match.value ?: return@launch
-            if (m.status == MatchStatus.FINISHED) return@launch
-            matchRepository.updateMatch(
-                m.copy(
-                    fieldPositionsJson = Match.encodeFieldPositions(
-                        positions.mapValues { it.value.x to it.value.y }
-                    )
+            if (finishing) return@launch
+            matchRepository.updateFieldPositions(
+                matchId,
+                Match.encodeFieldPositions(
+                    positions.mapValues { it.value.x to it.value.y }
                 )
             )
         }
@@ -661,75 +647,51 @@ class LiveMatchViewModel(
 
     fun finishMatch(onDone: () -> Unit) {
         viewModelScope.launch {
-            pauseTimer()
-            val m = match.value ?: return@launch
+            if (finishing) return@launch
+            finishing = true
+            persistJob?.cancel()
+            tickerJob?.cancel()
+            clockAnchorWallMs = 0L
+            _clock.update { it.copy(isRunning = false) }
+            val isHome = match.value?.isHome != false
+            val homeScore: Int
+            val awayScore: Int
+            if (isHome) {
+                homeScore = _ui.value.teamGoals
+                awayScore = _ui.value.rivalGoals
+            } else {
+                homeScore = _ui.value.rivalGoals
+                awayScore = _ui.value.teamGoals
+            }
             val positionsJson = Match.encodeFieldPositions(
                 _fieldPositions.value.mapValues { it.value.x to it.value.y }
             )
-            val finished = if (m.isHome) {
-                m.copy(
-                    status = MatchStatus.FINISHED,
-                    homeScore = _ui.value.teamGoals,
-                    awayScore = _ui.value.rivalGoals,
-                    livePeriod = _ui.value.period,
-                    liveElapsedSeconds = _clock.value.elapsedSeconds,
-                    liveClockRunning = false,
-                    liveClockAnchorWallMs = 0L,
-                    fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
-                    fieldPositionsJson = positionsJson
-                )
-            } else {
-                m.copy(
-                    status = MatchStatus.FINISHED,
-                    homeScore = _ui.value.rivalGoals,
-                    awayScore = _ui.value.teamGoals,
-                    livePeriod = _ui.value.period,
-                    liveElapsedSeconds = _clock.value.elapsedSeconds,
-                    liveClockRunning = false,
-                    liveClockAnchorWallMs = 0L,
-                    fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
-                    fieldPositionsJson = positionsJson
-                )
-            }
-            matchRepository.finishMatch(finished)
+            matchRepository.markMatchFinished(
+                matchId = matchId,
+                homeScore = homeScore,
+                awayScore = awayScore,
+                livePeriod = _ui.value.period,
+                liveElapsedSeconds = _clock.value.elapsedSeconds,
+                fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
+                fieldPositionsJson = positionsJson
+            )
             onDone()
         }
     }
 
     private suspend fun syncScore(teamGoals: Int, rivalGoals: Int) {
-        val m = match.value ?: return
-        if (m.status == MatchStatus.FINISHED) return
-        val running = _clock.value.isRunning
-        val anchor = if (running) clockAnchorWallMs else 0L
-        val positionsJson = Match.encodeFieldPositions(
-            _fieldPositions.value.mapValues { it.value.x to it.value.y }
-        )
-        val updated = if (m.isHome) {
-            m.copy(
-                status = MatchStatus.LIVE,
-                homeScore = teamGoals,
-                awayScore = rivalGoals,
-                livePeriod = _ui.value.period,
-                liveElapsedSeconds = _clock.value.elapsedSeconds,
-                liveClockRunning = running,
-                liveClockAnchorWallMs = anchor,
-                fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
-                fieldPositionsJson = positionsJson
-            )
+        if (finishing) return
+        val isHome = match.value?.isHome ?: return
+        val homeScore: Int
+        val awayScore: Int
+        if (isHome) {
+            homeScore = teamGoals
+            awayScore = rivalGoals
         } else {
-            m.copy(
-                status = MatchStatus.LIVE,
-                homeScore = rivalGoals,
-                awayScore = teamGoals,
-                livePeriod = _ui.value.period,
-                liveElapsedSeconds = _clock.value.elapsedSeconds,
-                liveClockRunning = running,
-                liveClockAnchorWallMs = anchor,
-                fieldSecondsJson = Match.encodeFieldSeconds(_fieldSeconds.value),
-                fieldPositionsJson = positionsJson
-            )
+            homeScore = rivalGoals
+            awayScore = teamGoals
         }
-        matchRepository.updateMatch(updated)
+        matchRepository.updateLiveScore(matchId, homeScore, awayScore)
     }
 
     companion object {

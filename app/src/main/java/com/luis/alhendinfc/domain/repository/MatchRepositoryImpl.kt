@@ -39,6 +39,9 @@ class MatchRepositoryImpl(
     override suspend fun createMatch(match: Match): Int =
         dao.insertMatch(match.toEntity()).toInt()
 
+    override suspend fun getMatchesByTeamOnce(teamId: Int): List<Match> =
+        dao.getMatchesByTeamOnce(teamId).map { it.toDomain() }
+
     override suspend fun updateMatch(match: Match) =
         dao.updateMatch(match.toEntity())
 
@@ -66,6 +69,7 @@ class MatchRepositoryImpl(
     override suspend fun startLiveMatch(matchId: Int) {
         dao.clearOnField(matchId)
         dao.putTitularesOnField(matchId)
+        dao.markOpenToLive(matchId)
     }
 
     override suspend fun setPlayerOnField(matchId: Int, playerId: Int, onField: Boolean) {
@@ -80,9 +84,61 @@ class MatchRepositoryImpl(
     }
 
     override suspend fun finishMatch(match: Match) {
-        dao.updateMatch(
-            match.copy(status = MatchStatus.FINISHED).toEntity()
+        markMatchFinished(
+            matchId = match.id,
+            homeScore = match.homeScore ?: 0,
+            awayScore = match.awayScore ?: 0,
+            livePeriod = match.livePeriod,
+            liveElapsedSeconds = match.liveElapsedSeconds,
+            fieldSecondsJson = match.fieldSecondsJson,
+            fieldPositionsJson = match.fieldPositionsJson
         )
+    }
+
+    override suspend fun markMatchFinished(
+        matchId: Int,
+        homeScore: Int,
+        awayScore: Int,
+        livePeriod: Int,
+        liveElapsedSeconds: Int,
+        fieldSecondsJson: String,
+        fieldPositionsJson: String
+    ) {
+        dao.markFinished(
+            matchId = matchId,
+            homeScore = homeScore,
+            awayScore = awayScore,
+            livePeriod = livePeriod,
+            liveElapsedSeconds = liveElapsedSeconds,
+            fieldSecondsJson = fieldSecondsJson,
+            fieldPositionsJson = fieldPositionsJson
+        )
+    }
+
+    override suspend fun updateFieldPositions(matchId: Int, fieldPositionsJson: String) {
+        dao.updateFieldPositions(matchId, fieldPositionsJson)
+    }
+
+    override suspend fun updateLiveClock(
+        matchId: Int,
+        elapsedSeconds: Int,
+        running: Boolean,
+        anchorWallMs: Long,
+        period: Int,
+        fieldSecondsJson: String
+    ) {
+        dao.updateLiveClock(
+            matchId = matchId,
+            elapsedSeconds = elapsedSeconds,
+            running = running,
+            anchorWallMs = anchorWallMs,
+            period = period,
+            fieldSecondsJson = fieldSecondsJson
+        )
+    }
+
+    override suspend fun updateLiveScore(matchId: Int, homeScore: Int, awayScore: Int) {
+        dao.updateLiveScore(matchId, homeScore, awayScore)
     }
 
     private fun MatchEntity.toDomain() = Match(

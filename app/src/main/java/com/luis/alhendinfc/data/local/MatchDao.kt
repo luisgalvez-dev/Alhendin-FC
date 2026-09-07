@@ -14,6 +14,9 @@ interface MatchDao {
     @Query("SELECT * FROM match_table WHERE teamId = :teamId ORDER BY date DESC, id DESC")
     fun getMatchesByTeam(teamId: Int): Flow<List<MatchEntity>>
 
+    @Query("SELECT * FROM match_table WHERE teamId = :teamId ORDER BY date DESC, id DESC")
+    suspend fun getMatchesByTeamOnce(teamId: Int): List<MatchEntity>
+
     @Query("SELECT * FROM match_table WHERE id = :id")
     fun getMatchById(id: Int): Flow<MatchEntity?>
 
@@ -86,4 +89,86 @@ interface MatchDao {
         "UPDATE match_player SET playerId = :keepId WHERE id = :rowId"
     )
     suspend fun updateMatchPlayerPlayerId(rowId: Int, keepId: Int)
+
+    /**
+     * Persistencia parcial del live. Las WHERE deben coincidir con MatchLifecycle:
+     * no reescribir la fila completa desde una copia de UI potencialmente obsoleta.
+     */
+    @Query(
+        """
+        UPDATE match_table SET
+            status = 'LIVE',
+            homeScore = 0,
+            awayScore = 0,
+            livePeriod = 1,
+            liveElapsedSeconds = 0,
+            liveClockRunning = 0,
+            liveClockAnchorWallMs = 0,
+            fieldSecondsJson = '',
+            fieldPositionsJson = ''
+        WHERE id = :matchId AND status = 'OPEN'
+        """
+    )
+    suspend fun markOpenToLive(matchId: Int)
+
+    @Query(
+        """
+        UPDATE match_table SET
+            status = 'FINISHED',
+            homeScore = :homeScore,
+            awayScore = :awayScore,
+            livePeriod = :livePeriod,
+            liveElapsedSeconds = :liveElapsedSeconds,
+            liveClockRunning = 0,
+            liveClockAnchorWallMs = 0,
+            fieldSecondsJson = :fieldSecondsJson,
+            fieldPositionsJson = :fieldPositionsJson
+        WHERE id = :matchId AND status != 'FINISHED'
+        """
+    )
+    suspend fun markFinished(
+        matchId: Int,
+        homeScore: Int,
+        awayScore: Int,
+        livePeriod: Int,
+        liveElapsedSeconds: Int,
+        fieldSecondsJson: String,
+        fieldPositionsJson: String
+    )
+
+    @Query(
+        """
+        UPDATE match_table SET fieldPositionsJson = :fieldPositionsJson
+        WHERE id = :matchId AND status = 'LIVE'
+        """
+    )
+    suspend fun updateFieldPositions(matchId: Int, fieldPositionsJson: String)
+
+    @Query(
+        """
+        UPDATE match_table SET
+            liveElapsedSeconds = :elapsedSeconds,
+            liveClockRunning = :running,
+            liveClockAnchorWallMs = :anchorWallMs,
+            livePeriod = :period,
+            fieldSecondsJson = :fieldSecondsJson
+        WHERE id = :matchId AND status = 'LIVE'
+        """
+    )
+    suspend fun updateLiveClock(
+        matchId: Int,
+        elapsedSeconds: Int,
+        running: Boolean,
+        anchorWallMs: Long,
+        period: Int,
+        fieldSecondsJson: String
+    )
+
+    @Query(
+        """
+        UPDATE match_table SET homeScore = :homeScore, awayScore = :awayScore
+        WHERE id = :matchId AND status = 'LIVE'
+        """
+    )
+    suspend fun updateLiveScore(matchId: Int, homeScore: Int, awayScore: Int)
 }

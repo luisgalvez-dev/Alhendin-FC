@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.local.AlhendinDatabase
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Match
+import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.SeasonFixture
@@ -131,16 +132,16 @@ class CalendarViewModel(
     }
 
     /**
-     * Crea un partido OPEN con datos de la jornada, o reutiliza uno OPEN/LIVE existente
-     * de esa misma jornada. Devuelve el id para abrir el setup.
+     * Abre el partido ya asociado a la jornada, o crea uno OPEN si aún no existe.
+     * Reutiliza también un partido FINISHED: no se crea un segundo Match.
      */
     fun openOrPrepareMatch(row: FixtureRow, onReady: (matchId: Int) -> Unit) {
         viewModelScope.launch {
             val matchday = row.fixture.matchday
-            val existing = matches.value.firstOrNull {
-                it.matchday == matchday &&
-                    (it.status == MatchStatus.OPEN || it.status == MatchStatus.LIVE)
-            }
+            val existing = MatchLifecycle.resolveMatchForFixture(
+                matchRepository.getMatchesByTeamOnce(teamId),
+                matchday
+            )
             if (existing != null) {
                 onReady(existing.id)
                 return@launch

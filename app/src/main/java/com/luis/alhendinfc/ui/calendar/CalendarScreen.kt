@@ -76,6 +76,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Match
+import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.SeasonFixture
@@ -375,6 +376,7 @@ private fun FixturesTab(
     ) {
         items(fixtures, key = { it.fixture.id }) { row ->
             val related = matchesByDay[row.fixture.matchday].orEmpty()
+            val associated = MatchLifecycle.resolveMatchForFixture(related, row.fixture.matchday)
             val openOrLive = related.firstOrNull {
                 it.status == MatchStatus.OPEN || it.status == MatchStatus.LIVE
             }
@@ -386,6 +388,7 @@ private fun FixturesTab(
                     related.any { it.status == MatchStatus.FINISHED } -> "Jugado"
                     else -> null
                 },
+                actionLabel = MatchLifecycle.fixtureActionLabel(associated),
                 onPrepare = { onPrepareMatch(row) },
                 onEdit = { onEdit(row) },
                 onDelete = { onDelete(row) }
@@ -399,6 +402,7 @@ private fun FixturesTab(
 private fun FixtureCard(
     row: FixtureRow,
     existingLabel: String?,
+    actionLabel: String,
     onPrepare: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -507,7 +511,7 @@ private fun FixtureCard(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text(if (existingLabel == "Preparando" || existingLabel == "En vivo") "Abrir" else "Preparar")
+                Text(actionLabel)
             }
         }
     }

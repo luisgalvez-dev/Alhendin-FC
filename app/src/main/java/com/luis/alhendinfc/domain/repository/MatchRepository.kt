@@ -15,6 +15,7 @@ interface MatchRepository {
     /** Convocatorias (titular/suplente) en partidos finalizados. */
     fun getFinishedCallupsByTeam(teamId: Int): Flow<List<MatchPlayer>>
     suspend fun createMatch(match: Match): Int
+    suspend fun getMatchesByTeamOnce(teamId: Int): List<Match>
     suspend fun updateMatch(match: Match)
     suspend fun deleteMatch(match: Match)
     suspend fun setPlayerCallup(matchId: Int, playerId: Int, status: CallupStatus)
@@ -23,4 +24,23 @@ interface MatchRepository {
     suspend fun addEvent(event: MatchEvent): Int
     suspend fun deleteEvent(eventId: Int)
     suspend fun finishMatch(match: Match)
+    suspend fun markMatchFinished(
+        matchId: Int,
+        homeScore: Int,
+        awayScore: Int,
+        livePeriod: Int,
+        liveElapsedSeconds: Int,
+        fieldSecondsJson: String,
+        fieldPositionsJson: String
+    )
+    suspend fun updateFieldPositions(matchId: Int, fieldPositionsJson: String)
+    suspend fun updateLiveClock(
+        matchId: Int,
+        elapsedSeconds: Int,
+        running: Boolean,
+        anchorWallMs: Long,
+        period: Int,
+        fieldSecondsJson: String
+    )
+    suspend fun updateLiveScore(matchId: Int, homeScore: Int, awayScore: Int)
 }
