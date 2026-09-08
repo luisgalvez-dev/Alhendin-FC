@@ -23,14 +23,11 @@ interface OpponentClubDao {
     @Query("SELECT * FROM opponent_club ORDER BY id ASC")
     suspend fun getAllOnce(): List<OpponentClubEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun replaceAll(entities: List<OpponentClubEntity>)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAll(entities: List<OpponentClubEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: OpponentClubEntity): Long
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertAll(entities: List<OpponentClubEntity>): List<Long>
 
     @Update
     suspend fun update(entity: OpponentClubEntity)
@@ -48,20 +45,20 @@ interface SeasonFixtureDao {
     @Query("SELECT * FROM season_fixture WHERE teamId = :teamId AND matchday = :matchday LIMIT 1")
     suspend fun getByMatchday(teamId: Int, matchday: Int): SeasonFixtureEntity?
 
+    @Query("SELECT * FROM season_fixture WHERE id = :id LIMIT 1")
+    suspend fun getByIdOnce(id: Int): SeasonFixtureEntity?
+
     @Query("SELECT COUNT(*) FROM season_fixture WHERE teamId = :teamId")
     suspend fun countByTeam(teamId: Int): Int
 
     @Query("SELECT * FROM season_fixture ORDER BY id ASC")
     suspend fun getAllOnce(): List<SeasonFixtureEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun replaceAll(entities: List<SeasonFixtureEntity>)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(entity: SeasonFixtureEntity): Long
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(entities: List<SeasonFixtureEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(entity: SeasonFixtureEntity): Long
 
     @Update
     suspend fun update(entity: SeasonFixtureEntity)

@@ -8,7 +8,9 @@ import androidx.room.PrimaryKey
     tableName = "season_fixture",
     indices = [
         Index(value = ["teamId"]),
-        Index(value = ["teamId", "matchday"], unique = true)
+        Index(value = ["teamId", "matchday"], unique = true),
+        Index(value = ["syncId"], unique = true),
+        Index(value = ["dateEpochDay"])
     ]
 )
 data class SeasonFixtureEntity(
@@ -19,6 +21,10 @@ data class SeasonFixtureEntity(
     val isHome: Boolean = true,
     val date: String = "",
     val time: String = "",
-    /** Si vacío, se usa el estadio del club visitado / local según isHome */
-    val stadiumOverride: String = ""
+    val stadiumOverride: String = "",
+    val syncId: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+    val deletedAt: Long? = null,
+    val dateEpochDay: Long? = null
 )

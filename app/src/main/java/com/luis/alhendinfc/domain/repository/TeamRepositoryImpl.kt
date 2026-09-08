@@ -1,5 +1,7 @@
 package com.luis.alhendinfc.domain.repository
 
+import com.luis.alhendinfc.data.local.EntitySync
+import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.TeamDao
 import com.luis.alhendinfc.data.local.TeamEntity
 import com.luis.alhendinfc.domain.model.Team
@@ -16,11 +18,16 @@ class TeamRepositoryImpl(private val dao: TeamDao) : TeamRepository {
 
     override suspend fun addTeam(team: Team): Int {
         val isFirst = dao.getTeamCount() == 0
-        return dao.insertTeam(team.toEntity().copy(isSelected = isFirst)).toInt()
+        val stamped = EntityWrites.teamForInsert(
+            team.toEntity().copy(isSelected = isFirst),
+            EntitySync.now()
+        )
+        return dao.insertTeam(stamped).toInt()
     }
 
     override suspend fun updateTeam(team: Team) {
-        dao.updateTeam(team.toEntity())
+        val existing = dao.getByIdOnce(team.id) ?: return
+        dao.updateTeam(EntityWrites.teamForUpdate(existing, team.toEntity(), EntitySync.now()))
     }
 
     override suspend fun deleteTeam(team: Team) {

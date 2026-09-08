@@ -6,7 +6,11 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "opponent_club",
-    indices = [Index(value = ["teamId"]), Index(value = ["teamId", "name"], unique = true)]
+    indices = [
+        Index(value = ["teamId"]),
+        Index(value = ["teamId", "name"], unique = true),
+        Index(value = ["syncId"], unique = true)
+    ]
 )
 data class OpponentClubEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -15,7 +19,10 @@ data class OpponentClubEntity(
     val shortName: String = "",
     val stadium: String = "",
     val shieldUri: String? = null,
-    /** Texto libre: color(es) de la equipación. */
     val kitColors: String = "",
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    val syncId: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+    val deletedAt: Long? = null
 )

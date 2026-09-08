@@ -9,7 +9,8 @@ import androidx.room.PrimaryKey
     indices = [
         Index(value = ["matchId"]),
         Index(value = ["playerId"]),
-        Index(value = ["typeCode"])
+        Index(value = ["typeCode"]),
+        Index(value = ["syncId"], unique = true)
     ]
 )
 data class MatchEventEntity(
@@ -21,5 +22,8 @@ data class MatchEventEntity(
     val minute: Int = 0,
     val period: Int = 1,
     val value: Int = 1,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val syncId: String = "",
+    val updatedAt: Long = 0L,
+    val deletedAt: Long? = null
 )

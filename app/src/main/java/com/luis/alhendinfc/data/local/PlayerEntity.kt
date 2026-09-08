@@ -6,7 +6,10 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "player",
-    indices = [Index(value = ["teamId"])]
+    indices = [
+        Index(value = ["teamId"]),
+        Index(value = ["syncId"], unique = true)
+    ]
 )
 data class PlayerEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -20,5 +23,9 @@ data class PlayerEntity(
     val weight: Int = 0,
     val laterality: String = "DERECHA",
     val isActive: Boolean = true,
-    val observations: String = ""
+    val observations: String = "",
+    val syncId: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+    val deletedAt: Long? = null
 )

@@ -50,9 +50,9 @@ internal class RoomBackupMutator(
         if (payload.matches.isNotEmpty()) db.matchDao().insertMatches(payload.matches)
         if (payload.matchPlayers.isNotEmpty()) db.matchDao().insertMatchPlayers(payload.matchPlayers)
         if (payload.events.isNotEmpty()) db.matchEventDao().insertAll(payload.events)
-        if (payload.customStatTypes.isNotEmpty()) db.customStatTypeDao().replaceAll(payload.customStatTypes)
-        if (payload.opponentClubs.isNotEmpty()) db.opponentClubDao().replaceAll(payload.opponentClubs)
-        if (payload.fixtures.isNotEmpty()) db.seasonFixtureDao().replaceAll(payload.fixtures)
+        if (payload.customStatTypes.isNotEmpty()) db.customStatTypeDao().insertAll(payload.customStatTypes)
+        if (payload.opponentClubs.isNotEmpty()) db.opponentClubDao().insertAll(payload.opponentClubs)
+        if (payload.fixtures.isNotEmpty()) db.seasonFixtureDao().insertAll(payload.fixtures)
         fixSqliteSequences()
     }
 

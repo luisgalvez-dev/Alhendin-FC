@@ -18,7 +18,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         OpponentClubEntity::class,
         SeasonFixtureEntity::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = true
 )
 abstract class AlhendinDatabase : RoomDatabase() {
@@ -32,7 +32,7 @@ abstract class AlhendinDatabase : RoomDatabase() {
     abstract fun seasonFixtureDao(): SeasonFixtureDao
 
     companion object {
-        const val VERSION = 14
+        const val VERSION = 15
         const val NAME = "alhendin_db"
 
         @Volatile
@@ -127,7 +127,8 @@ abstract class AlhendinDatabase : RoomDatabase() {
                         MIGRATION_10_11,
                         MIGRATION_11_12,
                         MIGRATION_12_13,
-                        MIGRATION_13_14
+                        MIGRATION_13_14,
+                        Migration14To15
                     )
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                     .build()

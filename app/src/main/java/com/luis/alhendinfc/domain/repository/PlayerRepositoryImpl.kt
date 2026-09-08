@@ -1,5 +1,7 @@
 package com.luis.alhendinfc.domain.repository
 
+import com.luis.alhendinfc.data.local.EntitySync
+import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.MatchDao
 import com.luis.alhendinfc.data.local.PlayerDao
 import com.luis.alhendinfc.data.local.PlayerEntity
@@ -21,11 +23,12 @@ class PlayerRepositoryImpl(
         dao.getById(id).map { it?.toDomain() }
 
     override suspend fun addPlayer(player: Player) {
-        dao.insert(player.toEntity())
+        dao.insert(EntityWrites.playerForInsert(player.toEntity(), EntitySync.now()))
     }
 
     override suspend fun updatePlayer(player: Player) {
-        dao.update(player.toEntity())
+        val existing = dao.getByIdOnce(player.id) ?: return
+        dao.update(EntityWrites.playerForUpdate(existing, player.toEntity(), EntitySync.now()))
     }
 
     override suspend fun deletePlayer(player: Player) {

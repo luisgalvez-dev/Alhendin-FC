@@ -57,7 +57,7 @@ object BackupValidator {
         "fixtures"
     )
 
-    fun validateJson(json: String, expectedSchemaVersion: Int): ValidatedBackup {
+    fun validateJson(json: String): ValidatedBackup {
         val root = try {
             JSONObject(json)
         } catch (e: JSONException) {
@@ -68,9 +68,9 @@ object BackupValidator {
             throw IllegalArgumentException("El backup no indica schemaVersion")
         }
         val schemaVersion = root.optInt("schemaVersion", -1)
-        if (schemaVersion != expectedSchemaVersion) {
+        if (schemaVersion != 14 && schemaVersion != 15) {
             throw IllegalArgumentException(
-                "schemaVersion incompatible: $schemaVersion (se espera $expectedSchemaVersion)"
+                "schemaVersion incompatible: $schemaVersion (se aceptan 14 o 15)"
             )
         }
 
@@ -85,14 +85,26 @@ object BackupValidator {
             }
         }
 
-        val teams = parseTeams(root.getJSONArray("teams"))
-        val players = parsePlayers(root.getJSONArray("players"))
-        val matches = parseMatches(root.getJSONArray("matches"))
-        val matchPlayers = parseMatchPlayers(root.getJSONArray("matchPlayers"))
-        val events = parseEvents(root.getJSONArray("events"))
-        val customStats = parseCustomStats(root.getJSONArray("customStatTypes"))
-        val clubs = parseClubs(root.getJSONArray("opponentClubs"))
-        val fixtures = parseFixtures(root.getJSONArray("fixtures"))
+        val requireSync = schemaVersion == 15
+        val teams = parseTeams(root.getJSONArray("teams"), requireSync)
+        val players = parsePlayers(root.getJSONArray("players"), requireSync)
+        val matches = parseMatches(root.getJSONArray("matches"), requireSync)
+        val matchPlayers = parseMatchPlayers(root.getJSONArray("matchPlayers"), requireSync)
+        val events = parseEvents(root.getJSONArray("events"), requireSync)
+        val customStats = parseCustomStats(root.getJSONArray("customStatTypes"), requireSync)
+        val clubs = parseClubs(root.getJSONArray("opponentClubs"), requireSync)
+        val fixtures = parseFixtures(root.getJSONArray("fixtures"), requireSync)
+
+        if (requireSync) {
+            assertUniqueSyncIds("teams", teams.map { it.syncId })
+            assertUniqueSyncIds("players", players.map { it.syncId })
+            assertUniqueSyncIds("matches", matches.map { it.syncId })
+            assertUniqueSyncIds("matchPlayers", matchPlayers.map { it.syncId })
+            assertUniqueSyncIds("events", events.map { it.syncId })
+            assertUniqueSyncIds("customStatTypes", customStats.map { it.syncId })
+            assertUniqueSyncIds("opponentClubs", clubs.map { it.syncId })
+            assertUniqueSyncIds("fixtures", fixtures.map { it.syncId })
+        }
 
         val parsed = BackupCounts(
             teams = teams.size,
@@ -120,7 +132,7 @@ object BackupValidator {
             null
         }
 
-        return ValidatedBackup(
+        val payload = ValidatedBackup(
             schemaVersion = schemaVersion,
             teams = teams,
             players = players,
@@ -133,6 +145,7 @@ object BackupValidator {
             homeLayout = homeLayout,
             counts = parsed
         )
+        return if (schemaVersion == 14) BackupUpgrade.toV15(payload) else payload
     }
 
     private fun parseDeclaredCounts(o: JSONObject) = BackupCounts(
@@ -147,9 +160,25 @@ object BackupValidator {
     )
 }
 
+internal fun assertUniqueSyncIds(label: String, ids: List<String>) {
+    ids.forEachIndexed { index, id ->
+        if (id.isBlank()) {
+            throw IllegalArgumentException("syncId vacío o ausente en $label[$index]")
+        }
+    }
+    if (ids.size != ids.toSet().size) {
+        throw IllegalArgumentException("syncId duplicado en $label")
+    }
+}
+
 private fun JSONObject.optNullableInt(key: String): Int? {
     if (!has(key) || isNull(key)) return null
     return optInt(key)
+}
+
+private fun JSONObject.optNullableLong(key: String): Long? {
+    if (!has(key) || isNull(key)) return null
+    return optLong(key)
 }
 
 private fun JSONObject.optNullableString(key: String): String? {
@@ -158,7 +187,15 @@ private fun JSONObject.optNullableString(key: String): String? {
     return value.takeIf { it.isNotBlank() && it != "null" }
 }
 
-private fun parseTeams(arr: JSONArray) = buildList {
+private fun JSONObject.readSyncId(requireSync: Boolean): String {
+    if (!requireSync) return optString("syncId")
+    if (!has("syncId") || isNull("syncId")) {
+        throw IllegalArgumentException("syncId ausente")
+    }
+    return getString("syncId")
+}
+
+private fun parseTeams(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -168,13 +205,17 @@ private fun parseTeams(arr: JSONArray) = buildList {
                 category = o.optString("category"),
                 season = o.optString("season"),
                 shieldUri = o.optNullableString("shieldUri"),
-                isSelected = o.optBoolean("isSelected", false)
+                isSelected = o.optBoolean("isSelected", false),
+                syncId = o.readSyncId(requireSync),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
             )
         )
     }
 }
 
-private fun parsePlayers(arr: JSONArray) = buildList {
+private fun parsePlayers(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -190,13 +231,17 @@ private fun parsePlayers(arr: JSONArray) = buildList {
                 weight = o.optInt("weight"),
                 laterality = o.optString("laterality", "DERECHA"),
                 isActive = o.optBoolean("isActive", true),
-                observations = o.optString("observations")
+                observations = o.optString("observations"),
+                syncId = o.readSyncId(requireSync),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
             )
         )
     }
 }
 
-private fun parseMatches(arr: JSONArray) = buildList {
+private fun parseMatches(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -223,13 +268,18 @@ private fun parseMatches(arr: JSONArray) = buildList {
                 liveClockRunning = o.optBoolean("liveClockRunning", false),
                 liveClockAnchorWallMs = o.optLong("liveClockAnchorWallMs", 0L),
                 fieldSecondsJson = o.optString("fieldSecondsJson", ""),
-                fieldPositionsJson = o.optString("fieldPositionsJson", "")
+                fieldPositionsJson = o.optString("fieldPositionsJson", ""),
+                syncId = o.readSyncId(requireSync),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt"),
+                dateEpochDay = o.optNullableLong("dateEpochDay")
             )
         )
     }
 }
 
-private fun parseMatchPlayers(arr: JSONArray) = buildList {
+private fun parseMatchPlayers(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -238,13 +288,17 @@ private fun parseMatchPlayers(arr: JSONArray) = buildList {
                 matchId = o.getInt("matchId"),
                 playerId = o.getInt("playerId"),
                 callupStatus = o.optString("callupStatus", "NONE"),
-                isOnField = o.optBoolean("isOnField", false)
+                isOnField = o.optBoolean("isOnField", false),
+                syncId = o.readSyncId(requireSync),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
             )
         )
     }
 }
 
-private fun parseEvents(arr: JSONArray) = buildList {
+private fun parseEvents(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -257,13 +311,16 @@ private fun parseEvents(arr: JSONArray) = buildList {
                 minute = o.optInt("minute"),
                 period = o.optInt("period", 1),
                 value = o.optInt("value", 1),
-                createdAt = o.optLong("createdAt", System.currentTimeMillis())
+                createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+                syncId = o.readSyncId(requireSync),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
             )
         )
     }
 }
 
-private fun parseCustomStats(arr: JSONArray) = buildList {
+private fun parseCustomStats(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -276,13 +333,16 @@ private fun parseCustomStats(arr: JSONArray) = buildList {
                 appliesTo = o.optString("appliesTo", "ALL"),
                 sortOrder = o.optInt("sortOrder"),
                 isActive = o.optBoolean("isActive", true),
-                createdAt = o.optLong("createdAt", System.currentTimeMillis())
+                createdAt = o.optLong("createdAt", System.currentTimeMillis()),
+                syncId = o.readSyncId(requireSync),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
             )
         )
     }
 }
 
-private fun parseClubs(arr: JSONArray) = buildList {
+private fun parseClubs(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -294,13 +354,17 @@ private fun parseClubs(arr: JSONArray) = buildList {
                 stadium = o.optString("stadium"),
                 shieldUri = o.optNullableString("shieldUri"),
                 kitColors = o.optString("kitColors"),
-                sortOrder = o.optInt("sortOrder")
+                sortOrder = o.optInt("sortOrder"),
+                syncId = o.readSyncId(requireSync),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
             )
         )
     }
 }
 
-private fun parseFixtures(arr: JSONArray) = buildList {
+private fun parseFixtures(arr: JSONArray, requireSync: Boolean) = buildList {
     for (i in 0 until arr.length()) {
         val o = arr.getJSONObject(i)
         add(
@@ -312,7 +376,12 @@ private fun parseFixtures(arr: JSONArray) = buildList {
                 isHome = o.optBoolean("isHome", true),
                 date = o.optString("date"),
                 time = o.optString("time"),
-                stadiumOverride = o.optString("stadiumOverride")
+                stadiumOverride = o.optString("stadiumOverride"),
+                syncId = o.readSyncId(requireSync),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt"),
+                dateEpochDay = o.optNullableLong("dateEpochDay")
             )
         )
     }

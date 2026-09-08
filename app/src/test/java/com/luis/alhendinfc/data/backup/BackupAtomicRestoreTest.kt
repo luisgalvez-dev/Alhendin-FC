@@ -33,7 +33,7 @@ class BackupAtomicRestoreTest {
     fun invalidJson_doesNotMutateExistingData() = runTest {
         val mutator = FakeBackupMutator(original, failOnInsert = false)
         try {
-            val payload = BackupValidator.validateJson("{", 14)
+            val payload = BackupValidator.validateJson("{")
             commitValidatedBackup(mutator, payload)
             fail("La validación debería fallar")
         } catch (_: Exception) {
@@ -46,8 +46,7 @@ class BackupAtomicRestoreTest {
         val mutator = FakeBackupMutator(original, failOnInsert = false)
         try {
             val payload = BackupValidator.validateJson(
-                BackupValidatorTest.validJson(13),
-                14
+                BackupValidatorTest.validJson(13)
             )
             commitValidatedBackup(mutator, payload)
             fail("La validación debería fallar")
@@ -86,7 +85,7 @@ class BackupAtomicRestoreTest {
     }
 
     private fun emptyPayload(counts: BackupCounts) = ValidatedBackup(
-        schemaVersion = 14,
+        schemaVersion = 15,
         teams = emptyList(),
         players = emptyList(),
         matches = emptyList(),

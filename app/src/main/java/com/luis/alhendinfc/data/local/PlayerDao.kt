@@ -17,13 +17,16 @@ interface PlayerDao {
     @Query("SELECT * FROM player WHERE id = :id")
     fun getById(id: Int): Flow<PlayerEntity?>
 
+    @Query("SELECT * FROM player WHERE id = :id LIMIT 1")
+    suspend fun getByIdOnce(id: Int): PlayerEntity?
+
     @Query("SELECT * FROM player ORDER BY id ASC")
     suspend fun getAllOnce(): List<PlayerEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(player: PlayerEntity): Long
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(players: List<PlayerEntity>)
 
     @Query("SELECT COUNT(*) FROM player WHERE teamId = :teamId")

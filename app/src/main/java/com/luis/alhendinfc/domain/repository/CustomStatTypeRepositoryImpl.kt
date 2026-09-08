@@ -2,6 +2,8 @@ package com.luis.alhendinfc.domain.repository
 
 import com.luis.alhendinfc.data.local.CustomStatTypeDao
 import com.luis.alhendinfc.data.local.CustomStatTypeEntity
+import com.luis.alhendinfc.data.local.EntitySync
+import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.domain.model.CustomStatAppliesTo
 import com.luis.alhendinfc.domain.model.CustomStatType
 import kotlinx.coroutines.flow.Flow
@@ -21,18 +23,26 @@ class CustomStatTypeRepositoryImpl(
     override suspend fun add(type: CustomStatType): Int {
         val code = type.code.ifBlank { "CUSTOM_${UUID.randomUUID().toString().take(8)}" }
         return dao.insert(
-            type.copy(code = code).toEntity()
+            EntityWrites.statForInsert(type.copy(code = code).toEntity(), EntitySync.now())
         ).toInt()
     }
 
     override suspend fun update(type: CustomStatType) {
-        dao.update(type.toEntity())
+        val existing = dao.getById(type.id) ?: return
+        dao.update(EntityWrites.statForUpdate(existing, type.toEntity(), EntitySync.now()))
     }
 
     override suspend fun deleteOrDeactivate(type: CustomStatType) {
         val used = dao.countEventsWithCode(type.code, type.teamId)
         if (used > 0) {
-            dao.update(type.copy(isActive = false).toEntity())
+            val existing = dao.getById(type.id) ?: return
+            dao.update(
+                EntityWrites.statForUpdate(
+                    existing,
+                    type.copy(isActive = false).toEntity(),
+                    EntitySync.now()
+                )
+            )
         } else {
             dao.delete(type.toEntity())
         }

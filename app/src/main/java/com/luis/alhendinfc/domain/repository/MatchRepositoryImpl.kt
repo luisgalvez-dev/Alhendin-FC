@@ -1,5 +1,7 @@
 package com.luis.alhendinfc.domain.repository
 
+import com.luis.alhendinfc.data.local.EntitySync
+import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.MatchDao
 import com.luis.alhendinfc.data.local.MatchEntity
 import com.luis.alhendinfc.data.local.MatchEventDao
@@ -37,13 +39,15 @@ class MatchRepositoryImpl(
         dao.getFinishedCallupsByTeam(teamId).map { list -> list.map { it.toDomain() } }
 
     override suspend fun createMatch(match: Match): Int =
-        dao.insertMatch(match.toEntity()).toInt()
+        dao.insertMatch(EntityWrites.matchForInsert(match.toEntity(), EntitySync.now())).toInt()
 
     override suspend fun getMatchesByTeamOnce(teamId: Int): List<Match> =
         dao.getMatchesByTeamOnce(teamId).map { it.toDomain() }
 
-    override suspend fun updateMatch(match: Match) =
-        dao.updateMatch(match.toEntity())
+    override suspend fun updateMatch(match: Match) {
+        val existing = dao.getByIdOnce(match.id) ?: return
+        dao.updateMatch(EntityWrites.matchForUpdate(existing, match.toEntity(), EntitySync.now()))
+    }
 
     override suspend fun deleteMatch(match: Match) {
         eventDao.deleteByMatch(match.id)
@@ -55,13 +59,16 @@ class MatchRepositoryImpl(
         if (status == CallupStatus.NONE) {
             dao.deleteMatchPlayer(matchId, playerId)
         } else {
-            dao.upsertMatchPlayer(
-                MatchPlayerEntity(
-                    matchId = matchId,
-                    playerId = playerId,
-                    callupStatus = status.name,
-                    isOnField = status == CallupStatus.TITULAR
-                )
+            val now = EntitySync.now()
+            dao.upsertMatchPlayerPreservingIdentity(
+                matchId = matchId,
+                playerId = playerId,
+                callupStatus = status.name,
+                isOnField = status == CallupStatus.TITULAR,
+                syncId = EntitySync.newSyncId(),
+                createdAt = now,
+                updatedAt = now,
+                deletedAt = null
             )
         }
     }
@@ -69,7 +76,7 @@ class MatchRepositoryImpl(
     override suspend fun startLiveMatch(matchId: Int) {
         dao.clearOnField(matchId)
         dao.putTitularesOnField(matchId)
-        dao.markOpenToLive(matchId)
+        dao.markOpenToLive(matchId, EntitySync.now())
     }
 
     override suspend fun setPlayerOnField(matchId: Int, playerId: Int, onField: Boolean) {
@@ -77,7 +84,7 @@ class MatchRepositoryImpl(
     }
 
     override suspend fun addEvent(event: MatchEvent): Int =
-        eventDao.insert(event.toEntity()).toInt()
+        eventDao.insert(EntityWrites.eventForInsert(event.toEntity(), EntitySync.now())).toInt()
 
     override suspend fun deleteEvent(eventId: Int) {
         eventDao.deleteById(eventId)
@@ -111,7 +118,8 @@ class MatchRepositoryImpl(
             livePeriod = livePeriod,
             liveElapsedSeconds = liveElapsedSeconds,
             fieldSecondsJson = fieldSecondsJson,
-            fieldPositionsJson = fieldPositionsJson
+            fieldPositionsJson = fieldPositionsJson,
+            updatedAt = EntitySync.now()
         )
     }
 

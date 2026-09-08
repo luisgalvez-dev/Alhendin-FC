@@ -26,8 +26,8 @@ interface CustomStatTypeDao {
     @Query("SELECT * FROM custom_stat_type ORDER BY id ASC")
     suspend fun getAllOnce(): List<CustomStatTypeEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun replaceAll(entities: List<CustomStatTypeEntity>)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertAll(entities: List<CustomStatTypeEntity>)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: CustomStatTypeEntity): Long
@@ -52,7 +52,4 @@ interface CustomStatTypeDao {
 
     @Query("SELECT code FROM custom_stat_type WHERE teamId = :teamId")
     suspend fun getCodesByTeam(teamId: Int): List<String>
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insertAll(entities: List<CustomStatTypeEntity>)
 }

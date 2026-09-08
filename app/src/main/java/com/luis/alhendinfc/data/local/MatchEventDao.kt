@@ -26,10 +26,10 @@ interface MatchEventDao {
     @Query("SELECT * FROM match_event ORDER BY id ASC")
     suspend fun getAllOnce(): List<MatchEventEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(events: List<MatchEventEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(event: MatchEventEntity): Long
 
     @Delete

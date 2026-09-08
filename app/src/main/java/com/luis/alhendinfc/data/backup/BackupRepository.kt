@@ -98,8 +98,7 @@ class BackupRepository(
             if (!jsonFile.exists()) error("El ZIP no contiene backup.json")
 
             val payload = BackupValidator.validateJson(
-                jsonFile.readText(Charsets.UTF_8),
-                SCHEMA_VERSION
+                jsonFile.readText(Charsets.UTF_8)
             )
 
             writeSafetyBackup()
@@ -322,6 +321,10 @@ private fun teamsToJson(list: List<TeamEntity>) = JSONArray().also { arr ->
                 .put("season", t.season)
                 .put("shieldUri", t.shieldUri)
                 .put("isSelected", t.isSelected)
+                .put("syncId", t.syncId)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
         )
     }
 }
@@ -342,6 +345,10 @@ private fun playersToJson(list: List<PlayerEntity>) = JSONArray().also { arr ->
                 .put("laterality", p.laterality)
                 .put("isActive", p.isActive)
                 .put("observations", p.observations)
+                .put("syncId", p.syncId)
+                .put("createdAt", p.createdAt)
+                .put("updatedAt", p.updatedAt)
+                .putOptLong("deletedAt", p.deletedAt)
         )
     }
 }
@@ -373,6 +380,11 @@ private fun matchesToJson(list: List<MatchEntity>) = JSONArray().also { arr ->
                 .put("liveClockAnchorWallMs", m.liveClockAnchorWallMs)
                 .put("fieldSecondsJson", m.fieldSecondsJson)
                 .put("fieldPositionsJson", m.fieldPositionsJson)
+                .put("syncId", m.syncId)
+                .put("createdAt", m.createdAt)
+                .put("updatedAt", m.updatedAt)
+                .putOptLong("deletedAt", m.deletedAt)
+                .putOptLong("dateEpochDay", m.dateEpochDay)
         )
     }
 }
@@ -386,6 +398,10 @@ private fun matchPlayersToJson(list: List<MatchPlayerEntity>) = JSONArray().also
                 .put("playerId", mp.playerId)
                 .put("callupStatus", mp.callupStatus)
                 .put("isOnField", mp.isOnField)
+                .put("syncId", mp.syncId)
+                .put("createdAt", mp.createdAt)
+                .put("updatedAt", mp.updatedAt)
+                .putOptLong("deletedAt", mp.deletedAt)
         )
     }
 }
@@ -403,6 +419,9 @@ private fun eventsToJson(list: List<MatchEventEntity>) = JSONArray().also { arr 
                 .put("period", e.period)
                 .put("value", e.value)
                 .put("createdAt", e.createdAt)
+                .put("syncId", e.syncId)
+                .put("updatedAt", e.updatedAt)
+                .putOptLong("deletedAt", e.deletedAt)
         )
     }
 }
@@ -420,6 +439,9 @@ private fun customStatsToJson(list: List<CustomStatTypeEntity>) = JSONArray().al
                 .put("sortOrder", t.sortOrder)
                 .put("isActive", t.isActive)
                 .put("createdAt", t.createdAt)
+                .put("syncId", t.syncId)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
         )
     }
 }
@@ -436,6 +458,10 @@ private fun clubsToJson(list: List<OpponentClubEntity>) = JSONArray().also { arr
                 .put("shieldUri", c.shieldUri)
                 .put("kitColors", c.kitColors)
                 .put("sortOrder", c.sortOrder)
+                .put("syncId", c.syncId)
+                .put("createdAt", c.createdAt)
+                .put("updatedAt", c.updatedAt)
+                .putOptLong("deletedAt", c.deletedAt)
         )
     }
 }
@@ -452,6 +478,16 @@ private fun fixturesToJson(list: List<SeasonFixtureEntity>) = JSONArray().also {
                 .put("date", f.date)
                 .put("time", f.time)
                 .put("stadiumOverride", f.stadiumOverride)
+                .put("syncId", f.syncId)
+                .put("createdAt", f.createdAt)
+                .put("updatedAt", f.updatedAt)
+                .putOptLong("deletedAt", f.deletedAt)
+                .putOptLong("dateEpochDay", f.dateEpochDay)
         )
     }
+}
+
+private fun JSONObject.putOptLong(key: String, value: Long?): JSONObject {
+    if (value == null) put(key, JSONObject.NULL) else put(key, value)
+    return this
 }

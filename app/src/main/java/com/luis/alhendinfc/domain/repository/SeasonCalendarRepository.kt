@@ -1,5 +1,7 @@
 package com.luis.alhendinfc.domain.repository
 
+import com.luis.alhendinfc.data.local.EntitySync
+import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.OpponentClubDao
 import com.luis.alhendinfc.data.local.OpponentClubEntity
 import com.luis.alhendinfc.data.local.SeasonFixtureDao
@@ -37,16 +39,26 @@ class SeasonCalendarRepository(
     }
 
     suspend fun addClub(club: OpponentClub): Int =
-        clubDao.insert(club.toEntity()).toInt()
+        clubDao.insert(EntityWrites.clubForInsert(club.toEntity(), EntitySync.now())).toInt()
 
-    suspend fun updateClub(club: OpponentClub) =
-        clubDao.update(club.toEntity())
+    suspend fun updateClub(club: OpponentClub) {
+        val existing = clubDao.getById(club.id) ?: return
+        clubDao.update(EntityWrites.clubForUpdate(existing, club.toEntity(), EntitySync.now()))
+    }
 
     suspend fun deleteClub(club: OpponentClub) =
         clubDao.delete(club.toEntity())
 
-    suspend fun upsertFixture(fixture: SeasonFixture): Int =
-        fixtureDao.upsert(fixture.toEntity()).toInt()
+    suspend fun upsertFixture(fixture: SeasonFixture): Int {
+        val now = EntitySync.now()
+        return if (fixture.id <= 0) {
+            fixtureDao.insert(EntityWrites.fixtureForInsert(fixture.toEntity(), now)).toInt()
+        } else {
+            val existing = fixtureDao.getByIdOnce(fixture.id) ?: return 0
+            fixtureDao.update(EntityWrites.fixtureForUpdate(existing, fixture.toEntity(), now))
+            existing.id
+        }
+    }
 
     suspend fun deleteFixture(fixture: SeasonFixture) =
         fixtureDao.delete(fixture.toEntity())
