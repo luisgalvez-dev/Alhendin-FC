@@ -6,8 +6,13 @@ import com.luis.alhendinfc.domain.model.CalendarDate
 object EntityWrites {
 
     fun teamForInsert(team: TeamEntity, now: Long): TeamEntity {
-        val (syncId, created, updated) = EntitySync.stampInsert(now)
-        return team.copy(syncId = syncId, createdAt = created, updatedAt = updated, deletedAt = null)
+        val stamp = EntitySync.stampInsert(now)
+        return team.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
     }
 
     fun teamForUpdate(existing: TeamEntity, incoming: TeamEntity, now: Long): TeamEntity {
@@ -26,8 +31,13 @@ object EntityWrites {
     }
 
     fun playerForInsert(player: PlayerEntity, now: Long): PlayerEntity {
-        val (syncId, created, updated) = EntitySync.stampInsert(now)
-        return player.copy(syncId = syncId, createdAt = created, updatedAt = updated, deletedAt = null)
+        val stamp = EntitySync.stampInsert(now)
+        return player.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
     }
 
     fun playerForUpdate(existing: PlayerEntity, incoming: PlayerEntity, now: Long): PlayerEntity =
@@ -39,11 +49,11 @@ object EntityWrites {
         )
 
     fun matchForInsert(match: MatchEntity, now: Long): MatchEntity {
-        val (syncId, created, updated) = EntitySync.stampInsert(now)
+        val stamp = EntitySync.stampInsert(now)
         return match.copy(
-            syncId = syncId,
-            createdAt = created,
-            updatedAt = updated,
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
             deletedAt = null,
             dateEpochDay = CalendarDate.toEpochDay(match.date)
         )
@@ -65,8 +75,13 @@ object EntityWrites {
         )
 
     fun clubForInsert(club: OpponentClubEntity, now: Long): OpponentClubEntity {
-        val (syncId, created, updated) = EntitySync.stampInsert(now)
-        return club.copy(syncId = syncId, createdAt = created, updatedAt = updated, deletedAt = null)
+        val stamp = EntitySync.stampInsert(now)
+        return club.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
     }
 
     fun clubForUpdate(existing: OpponentClubEntity, incoming: OpponentClubEntity, now: Long): OpponentClubEntity =
@@ -77,12 +92,15 @@ object EntityWrites {
             updatedAt = now
         )
 
+    fun clubForRevive(existing: OpponentClubEntity, incoming: OpponentClubEntity, now: Long): OpponentClubEntity =
+        clubForUpdate(existing, incoming, now).copy(deletedAt = null, updatedAt = now)
+
     fun fixtureForInsert(fixture: SeasonFixtureEntity, now: Long): SeasonFixtureEntity {
-        val (syncId, created, updated) = EntitySync.stampInsert(now)
+        val stamp = EntitySync.stampInsert(now)
         return fixture.copy(
-            syncId = syncId,
-            createdAt = created,
-            updatedAt = updated,
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
             deletedAt = null,
             dateEpochDay = CalendarDate.toEpochDay(fixture.date)
         )
@@ -101,6 +119,13 @@ object EntityWrites {
             updatedAt = now,
             dateEpochDay = CalendarDate.toEpochDay(incoming.date)
         )
+
+    fun fixtureForRevive(
+        existing: SeasonFixtureEntity,
+        incoming: SeasonFixtureEntity,
+        now: Long
+    ): SeasonFixtureEntity =
+        fixtureForUpdate(existing, incoming, now).copy(deletedAt = null, updatedAt = now)
 
     fun statForInsert(stat: CustomStatTypeEntity, now: Long): CustomStatTypeEntity {
         val createdAt = if (stat.createdAt > 0L) stat.createdAt else now
@@ -124,6 +149,13 @@ object EntityWrites {
             updatedAt = now
         )
 
+    fun statForRevive(
+        existing: CustomStatTypeEntity,
+        incoming: CustomStatTypeEntity,
+        now: Long
+    ): CustomStatTypeEntity =
+        statForUpdate(existing, incoming, now).copy(deletedAt = null, isActive = true, updatedAt = now)
+
     fun eventForInsert(event: MatchEventEntity, now: Long): MatchEventEntity {
         val createdAt = if (event.createdAt > 0L) event.createdAt else now
         return event.copy(
@@ -132,5 +164,10 @@ object EntityWrites {
             updatedAt = createdAt,
             deletedAt = null
         )
+    }
+
+    fun <T> applyTombstone(copy: (deletedAt: Long, updatedAt: Long) -> T, now: Long): T {
+        val stamp = EntitySync.stampTombstone(now)
+        return copy(stamp.deletedAt!!, stamp.updatedAt)
     }
 }

@@ -15,6 +15,10 @@ import kotlinx.coroutines.flow.map
 
 private val Context.homeDataStore: DataStore<Preferences> by preferencesDataStore(name = "home_prefs")
 
+/**
+ * Preferencias personales/locales del Inicio (orden y visibilidad de módulos).
+ * No forma parte del dataset deportivo compartido. El Inicio por usuario llega tras Auth.
+ */
 class HomePreferencesRepository(private val dataStore: DataStore<Preferences>) {
 
     val layoutConfig: Flow<HomeLayoutConfig> = dataStore.data.map { prefs ->

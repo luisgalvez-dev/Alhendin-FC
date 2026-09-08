@@ -107,6 +107,7 @@ class EntityWritesTest {
             .substringBefore("\"\"\"")
         assertTrue(conflictClause.contains("callupStatus = excluded.callupStatus"))
         assertTrue(conflictClause.contains("updatedAt = excluded.updatedAt"))
+        assertTrue(conflictClause.contains("deletedAt = excluded.deletedAt"))
         assertFalse(conflictClause.contains("id = excluded.id"))
         assertFalse(conflictClause.contains("syncId = excluded.syncId"))
         assertFalse(conflictClause.contains("createdAt = excluded.createdAt"))

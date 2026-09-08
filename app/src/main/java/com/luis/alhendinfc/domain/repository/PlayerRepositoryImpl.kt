@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 
 class PlayerRepositoryImpl(
     private val dao: PlayerDao,
+    @Suppress("unused")
     private val matchDao: MatchDao? = null
 ) : PlayerRepository {
 
@@ -32,9 +33,7 @@ class PlayerRepositoryImpl(
     }
 
     override suspend fun deletePlayer(player: Player) {
-        dao.delete(player.toEntity())
-        val md = matchDao ?: return
-        // Limpieza opcional de referencias no se fuerza aquí; Room no tiene FK.
+        dao.markDeleted(player.id, EntitySync.now())
     }
 
     private fun PlayerEntity.toDomain() = Player(

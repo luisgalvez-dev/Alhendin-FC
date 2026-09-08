@@ -38,6 +38,8 @@ internal class RoomBackupMutator(
         db.withTransaction(block)
 
     override suspend fun deleteAllRows() {
+        // Wipe interno de restauración atómica: no es baja deportiva. Las filas
+        // (incluidos tombstones) se sustituyen por el payload validado.
         val sql = db.openHelper.writableDatabase
         BackupRepository.ALL_TABLES.forEach { table ->
             sql.execSQL("DELETE FROM `$table`")

@@ -50,16 +50,17 @@ class MatchRepositoryImpl(
     }
 
     override suspend fun deleteMatch(match: Match) {
-        eventDao.deleteByMatch(match.id)
-        dao.deleteMatchPlayersByMatch(match.id)
-        dao.deleteMatch(match.toEntity())
+        val now = EntitySync.now()
+        eventDao.markDeletedByMatch(match.id, now)
+        dao.markDeletedPlayersByMatch(match.id, now)
+        dao.markDeleted(match.id, now)
     }
 
     override suspend fun setPlayerCallup(matchId: Int, playerId: Int, status: CallupStatus) {
+        val now = EntitySync.now()
         if (status == CallupStatus.NONE) {
-            dao.deleteMatchPlayer(matchId, playerId)
+            dao.markDeletedPlayer(matchId, playerId, now)
         } else {
-            val now = EntitySync.now()
             dao.upsertMatchPlayerPreservingIdentity(
                 matchId = matchId,
                 playerId = playerId,
@@ -87,7 +88,7 @@ class MatchRepositoryImpl(
         eventDao.insert(EntityWrites.eventForInsert(event.toEntity(), EntitySync.now())).toInt()
 
     override suspend fun deleteEvent(eventId: Int) {
-        eventDao.deleteById(eventId)
+        eventDao.markDeleted(eventId, EntitySync.now())
     }
 
     override suspend fun finishMatch(match: Match) {

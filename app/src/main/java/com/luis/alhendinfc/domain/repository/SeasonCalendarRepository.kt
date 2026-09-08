@@ -38,30 +38,43 @@ class SeasonCalendarRepository(
         return FixtureRow(f.toDomain(), club)
     }
 
-    suspend fun addClub(club: OpponentClub): Int =
-        clubDao.insert(EntityWrites.clubForInsert(club.toEntity(), EntitySync.now())).toInt()
+    suspend fun addClub(club: OpponentClub): Int {
+        val now = EntitySync.now()
+        val existing = clubDao.getByTeamAndNameIncludingDeleted(club.teamId, club.name.trim())
+        if (existing != null && existing.deletedAt != null) {
+            clubDao.update(EntityWrites.clubForRevive(existing, club.toEntity(), now))
+            return existing.id
+        }
+        return clubDao.insert(EntityWrites.clubForInsert(club.toEntity(), now)).toInt()
+    }
 
     suspend fun updateClub(club: OpponentClub) {
         val existing = clubDao.getById(club.id) ?: return
         clubDao.update(EntityWrites.clubForUpdate(existing, club.toEntity(), EntitySync.now()))
     }
 
-    suspend fun deleteClub(club: OpponentClub) =
-        clubDao.delete(club.toEntity())
+    suspend fun deleteClub(club: OpponentClub) {
+        clubDao.markDeleted(club.id, EntitySync.now())
+    }
 
     suspend fun upsertFixture(fixture: SeasonFixture): Int {
         val now = EntitySync.now()
-        return if (fixture.id <= 0) {
-            fixtureDao.insert(EntityWrites.fixtureForInsert(fixture.toEntity(), now)).toInt()
-        } else {
-            val existing = fixtureDao.getByIdOnce(fixture.id) ?: return 0
-            fixtureDao.update(EntityWrites.fixtureForUpdate(existing, fixture.toEntity(), now))
-            existing.id
+        if (fixture.id <= 0) {
+            val tombstone = fixtureDao.getByMatchdayIncludingDeleted(fixture.teamId, fixture.matchday)
+            if (tombstone != null && tombstone.deletedAt != null) {
+                fixtureDao.update(EntityWrites.fixtureForRevive(tombstone, fixture.toEntity(), now))
+                return tombstone.id
+            }
+            return fixtureDao.insert(EntityWrites.fixtureForInsert(fixture.toEntity(), now)).toInt()
         }
+        val existing = fixtureDao.getByIdOnce(fixture.id) ?: return 0
+        fixtureDao.update(EntityWrites.fixtureForUpdate(existing, fixture.toEntity(), now))
+        return existing.id
     }
 
-    suspend fun deleteFixture(fixture: SeasonFixture) =
-        fixtureDao.delete(fixture.toEntity())
+    suspend fun deleteFixture(fixture: SeasonFixture) {
+        fixtureDao.markDeleted(fixture.id, EntitySync.now())
+    }
 
     private fun OpponentClubEntity.toDomain() = OpponentClub(
         id = id,

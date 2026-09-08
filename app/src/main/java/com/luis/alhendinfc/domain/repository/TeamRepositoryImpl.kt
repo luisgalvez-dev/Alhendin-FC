@@ -31,7 +31,7 @@ class TeamRepositoryImpl(private val dao: TeamDao) : TeamRepository {
     }
 
     override suspend fun deleteTeam(team: Team) {
-        dao.deleteTeam(team.toEntity())
+        dao.markDeleted(team.id, EntitySync.now())
     }
 
     override suspend fun selectTeam(teamId: Int) {

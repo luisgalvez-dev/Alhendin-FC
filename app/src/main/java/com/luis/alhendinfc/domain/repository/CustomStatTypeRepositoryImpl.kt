@@ -21,10 +21,15 @@ class CustomStatTypeRepositoryImpl(
         dao.getActiveByTeam(teamId).map { list -> list.map { it.toDomain() } }
 
     override suspend fun add(type: CustomStatType): Int {
+        val now = EntitySync.now()
         val code = type.code.ifBlank { "CUSTOM_${UUID.randomUUID().toString().take(8)}" }
-        return dao.insert(
-            EntityWrites.statForInsert(type.copy(code = code).toEntity(), EntitySync.now())
-        ).toInt()
+        val incoming = type.copy(code = code)
+        val existing = dao.getByTeamAndCodeIncludingDeleted(type.teamId, code)
+        if (existing != null && existing.deletedAt != null) {
+            dao.update(EntityWrites.statForRevive(existing, incoming.toEntity(), now))
+            return existing.id
+        }
+        return dao.insert(EntityWrites.statForInsert(incoming.toEntity(), now)).toInt()
     }
 
     override suspend fun update(type: CustomStatType) {
@@ -44,7 +49,7 @@ class CustomStatTypeRepositoryImpl(
                 )
             )
         } else {
-            dao.delete(type.toEntity())
+            dao.markDeleted(type.id, EntitySync.now())
         }
     }
 
