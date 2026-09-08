@@ -40,6 +40,8 @@ import com.luis.alhendinfc.ui.settings.EventTypesViewModel
 import com.luis.alhendinfc.ui.settings.SettingsScreen
 import com.luis.alhendinfc.ui.statistics.StatisticsScreen
 import com.luis.alhendinfc.ui.statistics.StatisticsViewModel
+import com.luis.alhendinfc.ui.tasks.TaskListScreen
+import com.luis.alhendinfc.ui.tasks.TaskViewModel
 import com.luis.alhendinfc.ui.team.TeamScreen
 import com.luis.alhendinfc.ui.team.TeamViewModel
 
@@ -58,6 +60,9 @@ sealed class AppScreen(val route: String) {
     }
     object Calendar : AppScreen("calendar/{teamId}") {
         fun createRoute(teamId: Int) = "calendar/$teamId"
+    }
+    object Tasks : AppScreen("tasks/{teamId}") {
+        fun createRoute(teamId: Int) = "tasks/$teamId"
     }
     object LiveMatch : AppScreen("live/{teamId}/{matchId}") {
         fun createRoute(teamId: Int, matchId: Int) = "live/$teamId/$matchId"
@@ -110,6 +115,10 @@ fun AlhendinNavGraph(navController: NavHostController) {
                 onNavigateToCalendar = {
                     val teamId = selectedTeam?.id ?: return@HomeScreen
                     navController.navigate(AppScreen.Calendar.createRoute(teamId))
+                },
+                onNavigateToTasks = {
+                    val teamId = selectedTeam?.id ?: return@HomeScreen
+                    navController.navigate(AppScreen.Tasks.createRoute(teamId))
                 },
                 onNavigateToPizarra = {
                     navController.navigate(AppScreen.Pizarra.route)
@@ -209,6 +218,18 @@ fun AlhendinNavGraph(navController: NavHostController) {
                 onOpenMatch = { matchId ->
                     navController.navigate(AppScreen.Matches.createRoute(teamId, matchId))
                 }
+            )
+        }
+
+        composable(
+            route = AppScreen.Tasks.route,
+            arguments = listOf(navArgument("teamId") { type = NavType.IntType })
+        ) { backStack ->
+            val teamId = backStack.arguments!!.getInt("teamId")
+            TasksRoute(
+                teamId = teamId,
+                team = selectedTeam,
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -407,6 +428,32 @@ private fun MatchesRoute(
             )
         }
     }
+}
+
+@Composable
+private fun TasksRoute(
+    teamId: Int,
+    team: com.luis.alhendinfc.domain.model.Team?,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val vm: TaskViewModel = viewModel(
+        key = "tasks_$teamId",
+        factory = TaskViewModel.factory(context.applicationContext, teamId)
+    )
+    val tasks by vm.tasks.collectAsStateWithLifecycle()
+    val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
+
+    TaskListScreen(
+        team = team,
+        tasks = tasks,
+        searchQuery = searchQuery,
+        onSearchChange = vm::setQuery,
+        onAdd = vm::add,
+        onUpdate = vm::update,
+        onDelete = vm::delete,
+        onBack = onBack
+    )
 }
 
 @Composable

@@ -55,6 +55,7 @@ internal class RoomBackupMutator(
         if (payload.customStatTypes.isNotEmpty()) db.customStatTypeDao().insertAll(payload.customStatTypes)
         if (payload.opponentClubs.isNotEmpty()) db.opponentClubDao().insertAll(payload.opponentClubs)
         if (payload.fixtures.isNotEmpty()) db.seasonFixtureDao().insertAll(payload.fixtures)
+        if (payload.tasks.isNotEmpty()) db.taskDao().insertAll(payload.tasks)
         fixSqliteSequences()
     }
 
@@ -66,7 +67,8 @@ internal class RoomBackupMutator(
         events = db.matchEventDao().getAllOnce().size,
         customStatTypes = db.customStatTypeDao().getAllOnce().size,
         opponentClubs = db.opponentClubDao().getAllOnce().size,
-        fixtures = db.seasonFixtureDao().getAllOnce().size
+        fixtures = db.seasonFixtureDao().getAllOnce().size,
+        tasks = db.taskDao().getAllOnce().size
     )
 
     private fun fixSqliteSequences() {

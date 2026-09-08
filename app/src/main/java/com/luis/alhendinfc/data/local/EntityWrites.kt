@@ -166,6 +166,25 @@ object EntityWrites {
         )
     }
 
+    fun taskForInsert(task: TaskEntity, now: Long): TaskEntity {
+        val stamp = EntitySync.stampInsert(now)
+        return task.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
+    }
+
+    fun taskForUpdate(existing: TaskEntity, incoming: TaskEntity, now: Long): TaskEntity =
+        incoming.copy(
+            id = existing.id,
+            syncId = existing.syncId,
+            createdAt = existing.createdAt,
+            deletedAt = existing.deletedAt,
+            updatedAt = now
+        )
+
     fun <T> applyTombstone(copy: (deletedAt: Long, updatedAt: Long) -> T, now: Long): T {
         val stamp = EntitySync.stampTombstone(now)
         return copy(stamp.deletedAt!!, stamp.updatedAt)

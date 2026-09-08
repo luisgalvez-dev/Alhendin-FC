@@ -11,6 +11,7 @@ import com.luis.alhendinfc.data.local.MatchPlayerEntity
 import com.luis.alhendinfc.data.local.OpponentClubEntity
 import com.luis.alhendinfc.data.local.PlayerEntity
 import com.luis.alhendinfc.data.local.SeasonFixtureEntity
+import com.luis.alhendinfc.data.local.TaskEntity
 import com.luis.alhendinfc.data.local.TeamEntity
 import com.luis.alhendinfc.data.preferences.HomePreferencesRepository
 import java.io.BufferedInputStream
@@ -46,6 +47,7 @@ class BackupRepository(
         val customStatTypes: Int,
         val opponentClubs: Int,
         val fixtures: Int,
+        val tasks: Int = 0,
         val mediaFiles: Int
     ) {
         fun asMessage(prefix: String): String =
@@ -58,6 +60,7 @@ class BackupRepository(
                 "Tipos personalizados: $customStatTypes\n" +
                 "Clubs rivales: $opponentClubs\n" +
                 "Jornadas: $fixtures\n" +
+                "Tareas: $tasks\n" +
                 "Archivos media: $mediaFiles"
     }
 
@@ -127,6 +130,7 @@ class BackupRepository(
                 customStatTypes = resolved.counts.customStatTypes,
                 opponentClubs = resolved.counts.opponentClubs,
                 fixtures = resolved.counts.fixtures,
+                tasks = resolved.counts.tasks,
                 mediaFiles = mediaMap.size
             )
         } finally {
@@ -189,6 +193,7 @@ class BackupRepository(
             c.copy(shieldUri = packMedia(c.shieldUri))
         }
         val fixtures = db.seasonFixtureDao().getAllOnce()
+        val tasks = db.taskDao().getAllOnce()
         val homeLayout = homePrefs.currentEncodedLayout()
 
         val counts = JSONObject()
@@ -200,6 +205,7 @@ class BackupRepository(
             .put("customStatTypes", customStats.size)
             .put("opponentClubs", clubs.size)
             .put("fixtures", fixtures.size)
+            .put("tasks", tasks.size)
 
         val root = JSONObject()
             .put("schemaVersion", SCHEMA_VERSION)
@@ -216,6 +222,7 @@ class BackupRepository(
             .put("customStatTypes", customStatsToJson(customStats))
             .put("opponentClubs", clubsToJson(clubs))
             .put("fixtures", fixturesToJson(fixtures))
+            .put("tasks", tasksToJson(tasks))
 
         val dbFile = context.getDatabasePath(AlhendinDatabase.NAME)
         val walFile = File(dbFile.path + "-wal")
@@ -261,6 +268,7 @@ class BackupRepository(
             customStatTypes = customStats.size,
             opponentClubs = clubs.size,
             fixtures = fixtures.size,
+            tasks = tasks.size,
             mediaFiles = mediaCount
         )
     }
@@ -300,7 +308,8 @@ class BackupRepository(
             "match_event",
             "custom_stat_type",
             "opponent_club",
-            "season_fixture"
+            "season_fixture",
+            "task"
         )
 
         fun getInstance(context: Context): BackupRepository =
@@ -485,6 +494,31 @@ private fun fixturesToJson(list: List<SeasonFixtureEntity>) = JSONArray().also {
                 .putOptLong("dateEpochDay", f.dateEpochDay)
         )
     }
+}
+
+private fun tasksToJson(list: List<TaskEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("teamId", t.teamId)
+                .put("name", t.name)
+                .put("objective", t.objective)
+                .putOptInt("playerCount", t.playerCount)
+                .putOptInt("durationMinutes", t.durationMinutes)
+                .put("description", t.description)
+                .put("boardSyncId", t.boardSyncId)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun JSONObject.putOptInt(key: String, value: Int?): JSONObject {
+    if (value == null) put(key, JSONObject.NULL) else put(key, value)
+    return this
 }
 
 private fun JSONObject.putOptLong(key: String, value: Long?): JSONObject {

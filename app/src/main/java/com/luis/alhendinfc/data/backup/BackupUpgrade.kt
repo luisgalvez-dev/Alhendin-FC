@@ -93,4 +93,15 @@ object BackupUpgrade {
         deletedAt = null,
         dateEpochDay = CalendarDate.toEpochDay(fixture.date)
     )
+
+    fun toV16(payload: ValidatedBackup): ValidatedBackup {
+        require(payload.schemaVersion == 15) {
+            "BackupUpgrade.toV16 solo acepta schema 15 (recibido ${payload.schemaVersion})"
+        }
+        return payload.copy(
+            schemaVersion = 16,
+            tasks = emptyList(),
+            counts = payload.counts.copy(tasks = 0)
+        )
+    }
 }

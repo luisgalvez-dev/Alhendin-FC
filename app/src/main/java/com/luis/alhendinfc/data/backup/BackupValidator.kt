@@ -7,6 +7,7 @@ import com.luis.alhendinfc.data.local.MatchPlayerEntity
 import com.luis.alhendinfc.data.local.OpponentClubEntity
 import com.luis.alhendinfc.data.local.PlayerEntity
 import com.luis.alhendinfc.data.local.SeasonFixtureEntity
+import com.luis.alhendinfc.data.local.TaskEntity
 import com.luis.alhendinfc.data.local.TeamEntity
 import org.json.JSONArray
 import org.json.JSONException
@@ -20,7 +21,8 @@ data class BackupCounts(
     val events: Int,
     val customStatTypes: Int,
     val opponentClubs: Int,
-    val fixtures: Int
+    val fixtures: Int,
+    val tasks: Int = 0
 )
 
 data class ValidatedBackup(
@@ -33,6 +35,7 @@ data class ValidatedBackup(
     val customStatTypes: List<CustomStatTypeEntity>,
     val opponentClubs: List<OpponentClubEntity>,
     val fixtures: List<SeasonFixtureEntity>,
+    val tasks: List<TaskEntity> = emptyList(),
     val homeLayout: String?,
     val counts: BackupCounts
 ) {
@@ -68,9 +71,9 @@ object BackupValidator {
             throw IllegalArgumentException("El backup no indica schemaVersion")
         }
         val schemaVersion = root.optInt("schemaVersion", -1)
-        if (schemaVersion != 14 && schemaVersion != 15) {
+        if (schemaVersion !in 14..16) {
             throw IllegalArgumentException(
-                "schemaVersion incompatible: $schemaVersion (se aceptan 14 o 15)"
+                "schemaVersion incompatible: $schemaVersion (se aceptan 14, 15 o 16)"
             )
         }
 
@@ -85,7 +88,18 @@ object BackupValidator {
             }
         }
 
-        val requireSync = schemaVersion == 15
+        if (schemaVersion >= 16) {
+            if (!root.has("tasks") || root.isNull("tasks")) {
+                throw IllegalArgumentException("El backup no contiene el array obligatorio 'tasks'")
+            }
+            try {
+                root.getJSONArray("tasks")
+            } catch (e: JSONException) {
+                throw IllegalArgumentException("El campo 'tasks' no es un array JSON", e)
+            }
+        }
+
+        val requireSync = schemaVersion >= 15
         val teams = parseTeams(root.getJSONArray("teams"), requireSync)
         val players = parsePlayers(root.getJSONArray("players"), requireSync)
         val matches = parseMatches(root.getJSONArray("matches"), requireSync)
@@ -94,6 +108,11 @@ object BackupValidator {
         val customStats = parseCustomStats(root.getJSONArray("customStatTypes"), requireSync)
         val clubs = parseClubs(root.getJSONArray("opponentClubs"), requireSync)
         val fixtures = parseFixtures(root.getJSONArray("fixtures"), requireSync)
+        val tasks = if (schemaVersion >= 16) {
+            parseTasks(root.getJSONArray("tasks"), requireSync = true)
+        } else {
+            emptyList()
+        }
 
         if (requireSync) {
             assertUniqueSyncIds("teams", teams.map { it.syncId })
@@ -104,6 +123,9 @@ object BackupValidator {
             assertUniqueSyncIds("customStatTypes", customStats.map { it.syncId })
             assertUniqueSyncIds("opponentClubs", clubs.map { it.syncId })
             assertUniqueSyncIds("fixtures", fixtures.map { it.syncId })
+            if (schemaVersion >= 16) {
+                assertUniqueSyncIds("tasks", tasks.map { it.syncId })
+            }
         }
 
         val parsed = BackupCounts(
@@ -114,7 +136,8 @@ object BackupValidator {
             events = events.size,
             customStatTypes = customStats.size,
             opponentClubs = clubs.size,
-            fixtures = fixtures.size
+            fixtures = fixtures.size,
+            tasks = tasks.size
         )
 
         if (root.has("counts") && !root.isNull("counts")) {
@@ -142,10 +165,15 @@ object BackupValidator {
             customStatTypes = customStats,
             opponentClubs = clubs,
             fixtures = fixtures,
+            tasks = tasks,
             homeLayout = homeLayout,
             counts = parsed
         )
-        return if (schemaVersion == 14) BackupUpgrade.toV15(payload) else payload
+        return when (schemaVersion) {
+            14 -> BackupUpgrade.toV16(BackupUpgrade.toV15(payload))
+            15 -> BackupUpgrade.toV16(payload)
+            else -> payload
+        }
     }
 
     private fun parseDeclaredCounts(o: JSONObject) = BackupCounts(
@@ -156,7 +184,8 @@ object BackupValidator {
         events = o.optInt("events"),
         customStatTypes = o.optInt("customStatTypes"),
         opponentClubs = o.optInt("opponentClubs"),
-        fixtures = o.optInt("fixtures")
+        fixtures = o.optInt("fixtures"),
+        tasks = o.optInt("tasks")
     )
 }
 
@@ -382,6 +411,28 @@ private fun parseFixtures(arr: JSONArray, requireSync: Boolean) = buildList {
                 updatedAt = o.optLong("updatedAt", 0L),
                 deletedAt = o.optNullableLong("deletedAt"),
                 dateEpochDay = o.optNullableLong("dateEpochDay")
+            )
+        )
+    }
+}
+
+private fun parseTasks(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            TaskEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                teamId = o.getInt("teamId"),
+                name = o.optString("name"),
+                objective = o.optString("objective"),
+                playerCount = o.optNullableInt("playerCount"),
+                durationMinutes = o.optNullableInt("durationMinutes"),
+                description = o.optString("description"),
+                boardSyncId = o.optNullableString("boardSyncId"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
             )
         )
     }

@@ -9,11 +9,13 @@ import org.junit.Test
 class RoomSchemaPhase0Test {
 
     @Test
-    fun roomVersionIs15AndSchemaExportIsEnabled() {
-        assertEquals(15, AlhendinDatabase.VERSION)
+    fun roomVersionIs16AndSchemaExportIsEnabled() {
+        assertEquals(16, AlhendinDatabase.VERSION)
         val source = databaseSource()
-        assertTrue(source.contains("version = 15"))
+        assertTrue(source.contains("version = 16"))
         assertTrue(source.contains("exportSchema = true"))
+        assertTrue(source.contains("Migration14To15"))
+        assertTrue(source.contains("Migration15To16"))
     }
 
     @Test
@@ -37,6 +39,20 @@ class RoomSchemaPhase0Test {
     }
 
     @Test
+    fun schemaV16FileIsExportedWithTask() {
+        val schema = schemaFile(16)
+        requireNotNull(schema) { "No se encontró el schema Room v16. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 16") || text.contains("\"version\":16"))
+        assertTrue(text.contains("\"tableName\": \"task\""))
+        assertTrue(text.contains("boardSyncId"))
+        assertTrue(text.contains("index_task_syncId"))
+        assertTrue(text.contains("index_task_teamId"))
+        assertFalse(text.contains("index_task_deletedAt"))
+        assertTrue(text.contains("match_table"))
+    }
+
+    @Test
     fun schemaV14FileRemainsForMigration() {
         val schema = schemaFile(14)
         requireNotNull(schema) { "Debe conservarse el schema Room v14 para migrar." }
@@ -47,7 +63,7 @@ class RoomSchemaPhase0Test {
     fun runtimeInsertsDoNotUseReplace() {
         val files = listOf(
             "MatchDao.kt", "PlayerDao.kt", "TeamDao.kt", "MatchEventDao.kt",
-            "CustomStatTypeDao.kt", "CalendarDao.kt"
+            "CustomStatTypeDao.kt", "CalendarDao.kt", "TaskDao.kt"
         ).map { name ->
             listOf(
                 File("src/main/java/com/luis/alhendinfc/data/local/$name"),
@@ -60,6 +76,20 @@ class RoomSchemaPhase0Test {
                 file.readText().contains("OnConflictStrategy.REPLACE")
             )
         }
+    }
+
+    @Test
+    fun taskDaoHidesTombstonesAndSearchesCaseInsensitive() {
+        val file = listOf(
+            File("src/main/java/com/luis/alhendinfc/data/local/TaskDao.kt"),
+            File("app/src/main/java/com/luis/alhendinfc/data/local/TaskDao.kt")
+        ).first { it.exists() }
+        val text = file.readText()
+        assertTrue(text.contains("deletedAt IS NULL"))
+        assertTrue(text.contains("LOWER(name) LIKE '%' || LOWER(:query) || '%'"))
+        assertTrue(text.contains("SELECT * FROM task ORDER BY id ASC"))
+        assertFalse(text.contains("OnConflictStrategy.REPLACE"))
+        assertFalse(text.contains("DELETE FROM task"))
     }
 
     private fun databaseSource(): String = listOf(

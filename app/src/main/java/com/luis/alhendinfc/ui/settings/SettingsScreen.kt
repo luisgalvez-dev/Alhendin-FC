@@ -265,7 +265,7 @@ fun SettingsScreen(
                     Text(
                         "Exporta absolutamente toda la base de datos: equipos, jugadores, " +
                             "partidos, convocatorias, eventos (goles, asistencias, tarjetas, " +
-                            "paradas, robos…), tipos personalizados, clubs, calendario e inicio. " +
+                            "paradas, robos…), tipos personalizados, clubs, calendario, tareas e inicio. " +
                             "Así recuperas también las estadísticas. Guarda el ZIP en el PC.",
                         style = MaterialTheme.typography.labelSmall,
                         color = GreenMint

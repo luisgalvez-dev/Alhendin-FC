@@ -27,6 +27,12 @@ enum class HomeModule(
         description = "Jornadas de la temporada",
         kind = HomeModuleKind.PRIMARY
     ),
+    TASKS(
+        id = "tasks",
+        title = "TAREAS",
+        description = "Ejercicios de entrenamiento reutilizables",
+        kind = HomeModuleKind.PRIMARY
+    ),
     PIZARRA(
         id = "pizarra",
         title = "PIZARRA",

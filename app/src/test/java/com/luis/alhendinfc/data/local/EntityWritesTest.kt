@@ -99,6 +99,37 @@ class EntityWritesTest {
     }
 
     @Test
+    fun createTask_assignsUuidAndEqualTimestamps() {
+        val created = EntityWrites.taskForInsert(
+            TaskEntity(id = 0, teamId = 1, name = "Presión"),
+            now
+        )
+        assertTrue(created.syncId.isNotBlank())
+        assertEquals(now, created.createdAt)
+        assertEquals(now, created.updatedAt)
+        assertNull(created.deletedAt)
+    }
+
+    @Test
+    fun editTask_preservesIdSyncIdAndCreatedAt() {
+        val existing = TaskEntity(
+            id = 7, syncId = "task-sync", teamId = 1, name = "A",
+            createdAt = 11L, updatedAt = 11L
+        )
+        val updated = EntityWrites.taskForUpdate(
+            existing,
+            existing.copy(name = "B", syncId = "stale", createdAt = 99L),
+            now
+        )
+        assertEquals(7, updated.id)
+        assertEquals("task-sync", updated.syncId)
+        assertEquals(11L, updated.createdAt)
+        assertEquals(now, updated.updatedAt)
+        assertEquals("B", updated.name)
+        assertNull(updated.deletedAt)
+    }
+
+    @Test
     fun matchPlayerUpsert_doesNotOverwriteIdentityColumns() {
         val source = matchDaoSource()
         assertTrue(source.contains("ON CONFLICT(matchId, playerId) DO UPDATE SET"))

@@ -17,7 +17,7 @@ class BackupUpgradeAndValidatorTest {
     fun v14Upgrade_assignsUuidsAndEpochDay_keepsIds() {
         val originalJson = v14Json()
         val payload = BackupValidator.validateJson(originalJson)
-        assertEquals(15, payload.schemaVersion)
+        assertEquals(16, payload.schemaVersion)
         assertEquals(1, payload.teams.size)
         assertEquals(17, payload.teams[0].id)
         assertTrue(payload.teams[0].syncId.isNotBlank())
@@ -27,6 +27,8 @@ class BackupUpgradeAndValidatorTest {
         assertEquals(99L, payload.events[0].createdAt)
         assertEquals(99L, payload.events[0].updatedAt)
         assertNull(payload.teams[0].deletedAt)
+        assertTrue(payload.tasks.isEmpty())
+        assertEquals(0, payload.counts.tasks)
         assertEquals(originalJson, v14Json())
     }
 
@@ -34,7 +36,8 @@ class BackupUpgradeAndValidatorTest {
     fun v15_preservesSyncIds() {
         val payload = BackupValidator.validateJson(v15Json("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
         assertEquals("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.teams[0].syncId)
-        assertEquals(15, payload.schemaVersion)
+        assertEquals(16, payload.schemaVersion)
+        assertTrue(payload.tasks.isEmpty())
     }
 
     @Test
@@ -75,13 +78,43 @@ class BackupUpgradeAndValidatorTest {
     }
 
     @Test
-    fun schema13And16_areRejected() {
+    fun schema13And17_areRejected_v16IsAccepted() {
         assertThrows(IllegalArgumentException::class.java) {
             BackupValidator.validateJson(BackupValidatorTest.validJson(13))
         }
         assertThrows(IllegalArgumentException::class.java) {
-            BackupValidator.validateJson(BackupValidatorTest.validJson(16))
+            BackupValidator.validateJson(BackupValidatorTest.validJson(17))
         }
+        val v16 = BackupValidator.validateJson(BackupValidatorTest.validJson(16))
+        assertEquals(16, v16.schemaVersion)
+    }
+
+    @Test
+    fun v16_restoresTasksKeepingIdsSyncIdsAndTombstones() {
+        val payload = BackupValidator.validateJson(v16JsonWithTasks())
+        assertEquals(16, payload.schemaVersion)
+        assertEquals(2, payload.tasks.size)
+        assertEquals(10, payload.tasks[0].id)
+        assertEquals("task-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.tasks[0].syncId)
+        assertEquals(1, payload.tasks[0].teamId)
+        assertEquals("Presión tras pérdida", payload.tasks[0].name)
+        assertNull(payload.tasks[0].deletedAt)
+        assertEquals(11, payload.tasks[1].id)
+        assertEquals("task-sync-bbbb-bbbb-bbbb-bbbbbbbbbbbb", payload.tasks[1].syncId)
+        assertEquals(1_700L, payload.tasks[1].deletedAt)
+        assertEquals(2, payload.counts.tasks)
+    }
+
+    @Test
+    fun v16_emptySyncId_isRejected() {
+        val json = v16JsonWithTasks().replace(
+            "\"syncId\": \"task-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"",
+            "\"syncId\": \"   \""
+        )
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            BackupValidator.validateJson(json)
+        }
+        assertTrue(error.message!!.contains("syncId"))
     }
 
     @Test
@@ -129,6 +162,45 @@ class BackupUpgradeAndValidatorTest {
           "teams": [{"id": 1, "name": "A", "category": "", "season": "", "isSelected": false, "syncId": "$syncId", "createdAt": 1, "updatedAt": 1}],
           "players": [], "matches": [], "matchPlayers": [], "events": [],
           "customStatTypes": [], "opponentClubs": [], "fixtures": []
+        }
+    """.trimIndent()
+
+    private fun v16JsonWithTasks() = """
+        {
+          "schemaVersion": 16,
+          "teams": [{"id": 1, "name": "A", "category": "", "season": "", "isSelected": false, "syncId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "createdAt": 1, "updatedAt": 1}],
+          "players": [], "matches": [], "matchPlayers": [], "events": [],
+          "customStatTypes": [], "opponentClubs": [], "fixtures": [],
+          "tasks": [
+            {
+              "id": 10,
+              "syncId": "task-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "teamId": 1,
+              "name": "Presión tras pérdida",
+              "objective": "Recuperar",
+              "playerCount": 8,
+              "durationMinutes": 12,
+              "description": "Tras pérdida inmediata",
+              "boardSyncId": null,
+              "createdAt": 100,
+              "updatedAt": 100,
+              "deletedAt": null
+            },
+            {
+              "id": 11,
+              "syncId": "task-sync-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              "teamId": 1,
+              "name": "Antigua",
+              "objective": "",
+              "playerCount": null,
+              "durationMinutes": null,
+              "description": "",
+              "boardSyncId": null,
+              "createdAt": 50,
+              "updatedAt": 1700,
+              "deletedAt": 1700
+            }
+          ]
         }
     """.trimIndent()
 }

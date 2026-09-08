@@ -10,15 +10,25 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV15_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(15))
-        assertEquals(15, payload.schemaVersion)
+        assertEquals(16, payload.schemaVersion)
         assertEquals(0, payload.counts.teams)
+        assertEquals(0, payload.counts.tasks)
+        assertTrue(payload.tasks.isEmpty())
     }
 
     @Test
     fun validEmptyBackupV14_isUpgraded() {
         val payload = BackupValidator.validateJson(validJson(14))
-        assertEquals(15, payload.schemaVersion)
+        assertEquals(16, payload.schemaVersion)
         assertEquals(0, payload.counts.players)
+        assertTrue(payload.tasks.isEmpty())
+    }
+
+    @Test
+    fun validEmptyBackupV16_isAccepted() {
+        val payload = BackupValidator.validateJson(validJson(16))
+        assertEquals(16, payload.schemaVersion)
+        assertTrue(payload.tasks.isEmpty())
     }
 
     @Test
@@ -68,7 +78,13 @@ class BackupValidatorTest {
     }
 
     companion object {
-        fun validJson(schemaVersion: Int) = """
+        fun validJson(schemaVersion: Int): String {
+            val tasksLine = if (schemaVersion >= 16) {
+                ",\n              \"tasks\": []"
+            } else {
+                ""
+            }
+            return """
             {
               "schemaVersion": $schemaVersion,
               "teams": [],
@@ -78,8 +94,9 @@ class BackupValidatorTest {
               "events": [],
               "customStatTypes": [],
               "opponentClubs": [],
-              "fixtures": []
+              "fixtures": []$tasksLine
             }
-        """.trimIndent()
+            """.trimIndent()
+        }
     }
 }
