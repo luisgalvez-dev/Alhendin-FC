@@ -20,6 +20,19 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    flavorDimensions += "environment"
+    productFlavors {
+        create("stable") {
+            dimension = "environment"
+            isDefault = true
+            applicationId = "com.luis.alhendinfc"
+        }
+        create("dev") {
+            dimension = "environment"
+            applicationId = "com.luis.alhendinfc.dev"
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
@@ -90,4 +103,10 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+}
+
+tasks.register("testDebugUnitTest") {
+    group = "verification"
+    description = "Alias de testStableDebugUnitTest (flavor por defecto)."
+    dependsOn("testStableDebugUnitTest")
 }
