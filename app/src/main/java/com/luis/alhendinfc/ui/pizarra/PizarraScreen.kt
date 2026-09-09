@@ -799,7 +799,7 @@ private fun DrawScope.drawFootball(center: Offset, radius: Float) {
                 center.x + radius * 0.86f * cos(angle),
                 center.y + radius * 0.86f * sin(angle)
             )
-            drawPath(regularPolygon(outerCenter, radius * 0.26f, angle), patch)
+            drawPath(regularPolygon(outerCenter, radius * 0.26f, angle, 5), patch)
         }
     }
 
