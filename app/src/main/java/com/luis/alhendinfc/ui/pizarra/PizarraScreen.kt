@@ -10,7 +10,10 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,15 +32,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -51,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -61,6 +69,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -76,12 +86,15 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.luis.alhendinfc.domain.model.BoardObject
+import com.luis.alhendinfc.domain.model.BoardObjectType
 import com.luis.alhendinfc.ui.util.LocalImageLoader
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.theme.GreenPitch
+import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -91,7 +104,8 @@ import kotlin.math.sin
 fun PizarraScreen(
     state: PizarraUiState,
     onBack: () -> Unit,
-    onTool: (DrawTool) -> Unit,
+    onSave: () -> Unit,
+    onTool: (BoardEditorTool) -> Unit,
     onColor: (Long) -> Unit,
     onStrokeWidth: (Float) -> Unit,
     onUseField: () -> Unit,
@@ -100,11 +114,15 @@ fun PizarraScreen(
     onTogglePlay: () -> Unit,
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
-    onStartStroke: (BoardPoint) -> Unit,
-    onUpdateStroke: (BoardPoint) -> Unit,
-    onFinishStroke: () -> Unit,
+    onPress: (BoardPoint) -> Unit,
+    onDrag: (BoardPoint) -> Unit,
+    onRelease: () -> Unit,
     onUndo: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onPendingText: (String?) -> Unit,
+    onDeleteSelected: () -> Unit,
+    onUpdateNumber: (String) -> Unit,
+    onUpdateText: (String) -> Unit
 ) {
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -114,12 +132,54 @@ fun PizarraScreen(
         ActivityResultContracts.GetContent()
     ) { uri -> if (uri != null) onVideoPicked(uri) }
 
+    var askingText by remember { mutableStateOf(false) }
+    var textValue by remember { mutableStateOf("") }
+    var editingToken by remember { mutableStateOf(false) }
+    var tokenValue by remember { mutableStateOf("") }
+
+    if (askingText) {
+        AlertDialog(
+            onDismissRequest = { askingText = false },
+            title = { Text("Texto") },
+            text = {
+                OutlinedTextField(value = textValue, onValueChange = { textValue = it }, label = { Text("Texto") }, singleLine = true)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onPendingText(textValue)
+                    onTool(BoardEditorTool.TEXT)
+                    askingText = false
+                }) { Text("Colocar") }
+            },
+            dismissButton = { TextButton(onClick = { askingText = false }) { Text("Cancelar") } }
+        )
+    }
+    if (editingToken) {
+        AlertDialog(
+            onDismissRequest = { editingToken = false },
+            title = { Text("Editar") },
+            text = {
+                OutlinedTextField(value = tokenValue, onValueChange = { tokenValue = it }, label = { Text("Número o texto") }, singleLine = true)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selected = state.objects.firstOrNull { it.objectId == state.selectedObjectId }
+                    if (selected?.type == BoardObjectType.TEXT) onUpdateText(tokenValue) else onUpdateNumber(tokenValue)
+                    editingToken = false
+                }) { Text("Guardar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { onDeleteSelected(); editingToken = false }) { Text("Eliminar") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Pizarra táctica",
+                        state.boardName + if (state.dirty) " •" else "",
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
@@ -129,10 +189,16 @@ fun PizarraScreen(
                         Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
                     }
                 },
+                actions = {
+                    IconButton(onClick = onSave) {
+                        Icon(Icons.Default.Check, contentDescription = "Guardar")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF0A2410),
                     titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
                 )
             )
         },
@@ -145,7 +211,12 @@ fun PizarraScreen(
         ) {
             PizarraToolbar(
                 state = state,
-                onTool = onTool,
+                onTool = { tool ->
+                    if (tool == BoardEditorTool.TEXT) {
+                        textValue = state.pendingText.orEmpty()
+                        askingText = true
+                    } else onTool(tool)
+                },
                 onColor = onColor,
                 onStrokeWidth = onStrokeWidth,
                 onUseField = onUseField,
@@ -156,6 +227,12 @@ fun PizarraScreen(
                 onSeekForward = onSeekForward,
                 onUndo = onUndo,
                 onClear = onClear,
+                onEditSelected = {
+                    val selected = state.objects.firstOrNull { it.objectId == state.selectedObjectId } ?: return@PizarraToolbar
+                    tokenValue = selected.number ?: selected.text.orEmpty()
+                    editingToken = true
+                },
+                onDeleteSelected = onDeleteSelected,
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(132.dp)
@@ -163,9 +240,9 @@ fun PizarraScreen(
 
             BoardArea(
                 state = state,
-                onStartStroke = onStartStroke,
-                onUpdateStroke = onUpdateStroke,
-                onFinishStroke = onFinishStroke,
+                onPress = onPress,
+                onDrag = onDrag,
+                onRelease = onRelease,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
@@ -178,7 +255,7 @@ fun PizarraScreen(
 @Composable
 private fun PizarraToolbar(
     state: PizarraUiState,
-    onTool: (DrawTool) -> Unit,
+    onTool: (BoardEditorTool) -> Unit,
     onColor: (Long) -> Unit,
     onStrokeWidth: (Float) -> Unit,
     onUseField: () -> Unit,
@@ -189,6 +266,8 @@ private fun PizarraToolbar(
     onSeekForward: () -> Unit,
     onUndo: () -> Unit,
     onClear: () -> Unit,
+    onEditSelected: () -> Unit,
+    onDeleteSelected: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -216,28 +295,41 @@ private fun PizarraToolbar(
         }
 
         SectionLabel("Herramienta")
+        ToolChip("Seleccionar", selected = state.tool == BoardEditorTool.SELECT, onClick = { onTool(BoardEditorTool.SELECT) })
         ToolChip(
             label = "Lápiz",
-            selected = state.tool == DrawTool.PEN,
-            onClick = { onTool(DrawTool.PEN) },
+            selected = state.tool == BoardEditorTool.PEN,
+            onClick = { onTool(BoardEditorTool.PEN) },
             icon = { Icon(Icons.Default.Edit, null, Modifier.size(16.dp), tint = Color.White) }
         )
         ToolChip(
             label = "Flecha",
-            selected = state.tool == DrawTool.ARROW,
-            onClick = { onTool(DrawTool.ARROW) }
+            selected = state.tool == BoardEditorTool.ARROW,
+            onClick = { onTool(BoardEditorTool.ARROW) }
         )
         ToolChip(
             label = "Óvalo",
-            selected = state.tool == DrawTool.OVAL,
-            onClick = { onTool(DrawTool.OVAL) }
+            selected = state.tool == BoardEditorTool.OVAL,
+            onClick = { onTool(BoardEditorTool.OVAL) }
         )
         ToolChip(
             label = "Borrador",
-            selected = state.tool == DrawTool.ERASER,
-            onClick = { onTool(DrawTool.ERASER) },
+            selected = state.tool == BoardEditorTool.ERASER,
+            onClick = { onTool(BoardEditorTool.ERASER) },
             icon = { Icon(Icons.Default.Clear, null, Modifier.size(16.dp), tint = Color.White) }
         )
+        SectionLabel("Objetos")
+        ToolChip("Azul", selected = state.tool == BoardEditorTool.BLUE_PLAYER, onClick = { onTool(BoardEditorTool.BLUE_PLAYER) })
+        ToolChip("Rojo", selected = state.tool == BoardEditorTool.RED_PLAYER, onClick = { onTool(BoardEditorTool.RED_PLAYER) })
+        ToolChip("Balón", selected = state.tool == BoardEditorTool.BALL, onClick = { onTool(BoardEditorTool.BALL) })
+        ToolChip("Cono", selected = state.tool == BoardEditorTool.CONE, onClick = { onTool(BoardEditorTool.CONE) })
+        ToolChip("Portería", selected = state.tool == BoardEditorTool.GOAL, onClick = { onTool(BoardEditorTool.GOAL) })
+        ToolChip("Mini", selected = state.tool == BoardEditorTool.MINI_GOAL, onClick = { onTool(BoardEditorTool.MINI_GOAL) })
+        ToolChip("Texto", selected = state.tool == BoardEditorTool.TEXT, onClick = { onTool(BoardEditorTool.TEXT) })
+        if (state.selectedObjectId != null) {
+            ToolChip("Editar ficha", selected = false, onClick = onEditSelected, accent = AmberAccent)
+            ToolChip("Quitar ficha", selected = false, onClick = onDeleteSelected, accent = Color(0xFFFF6B7A))
+        }
 
         SectionLabel("Grosor")
         listOf(4f to "Fino", 8f to "Medio", 14f to "Grueso").forEach { (w, label) ->
@@ -344,9 +436,9 @@ private fun ToolChip(
 @Composable
 private fun BoardArea(
     state: PizarraUiState,
-    onStartStroke: (BoardPoint) -> Unit,
-    onUpdateStroke: (BoardPoint) -> Unit,
-    onFinishStroke: () -> Unit,
+    onPress: (BoardPoint) -> Unit,
+    onDrag: (BoardPoint) -> Unit,
+    onRelease: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -402,11 +494,12 @@ private fun BoardArea(
         }
 
         DrawingOverlay(
-            strokes = state.strokes,
+            objects = state.objects,
             currentStroke = state.currentStroke,
-            onStartStroke = onStartStroke,
-            onUpdateStroke = onUpdateStroke,
-            onFinishStroke = onFinishStroke,
+            selectedObjectId = state.selectedObjectId,
+            onPress = onPress,
+            onDrag = onDrag,
+            onRelease = onRelease,
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -476,33 +569,271 @@ private fun VideoBackground(
 
 @Composable
 private fun DrawingOverlay(
-    strokes: List<DrawStroke>,
+    objects: List<BoardObject>,
     currentStroke: DrawStroke?,
-    onStartStroke: (BoardPoint) -> Unit,
-    onUpdateStroke: (BoardPoint) -> Unit,
-    onFinishStroke: () -> Unit,
+    selectedObjectId: String?,
+    onPress: (BoardPoint) -> Unit,
+    onDrag: (BoardPoint) -> Unit,
+    onRelease: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Canvas(
         modifier = modifier
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        onStartStroke(BoardPoint(offset.x, offset.y))
-                    },
-                    onDrag = { change, _ ->
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    val w = size.width.toFloat().coerceAtLeast(1f)
+                    val h = size.height.toFloat().coerceAtLeast(1f)
+                    fun norm(offset: Offset) = BoardPoint(offset.x / w, offset.y / h)
+                    onPress(norm(down.position))
+                    val slop = awaitTouchSlopOrCancellation(down.id) { change, _ ->
                         change.consume()
-                        onUpdateStroke(BoardPoint(change.position.x, change.position.y))
-                    },
-                    onDragEnd = { onFinishStroke() },
-                    onDragCancel = { onFinishStroke() }
-                )
+                    }
+                    if (slop != null) {
+                        onDrag(norm(slop.position))
+                        drag(slop.id) { change ->
+                            change.consume()
+                            onDrag(norm(change.position))
+                        }
+                    }
+                    onRelease()
+                }
             }
     ) {
-        strokes.forEach { drawStroke(it) }
-        currentStroke?.let { drawStroke(it) }
+        objects.forEach { drawBoardObject(it, selected = it.objectId == selectedObjectId) }
+        currentStroke?.let { drawStrokeNormalized(it) }
     }
+}
+
+private fun DrawScope.drawStrokeNormalized(stroke: DrawStroke) {
+    val color = stroke.colorArgb.toComposeColor()
+    val px = stroke.points.map { BoardPoint(it.x * size.width, it.y * size.height) }
+    val width = strokeWidthPx(stroke.width)
+    val pixelStroke = stroke.copy(points = px, width = width)
+    drawStroke(pixelStroke)
+}
+
+private fun DrawScope.strokeWidthPx(stored: Float): Float =
+    (stored / 400f) * minOf(size.width, size.height)
+
+private fun DrawScope.drawBoardObject(obj: BoardObject, selected: Boolean) {
+    val cx = obj.x * size.width
+    val cy = obj.y * size.height
+    val min = minOf(size.width, size.height)
+    val r = min * 0.028f
+    val selectedRing = if (selected) Color.White.copy(alpha = 0.85f) else null
+    when (obj.type) {
+        BoardObjectType.BLUE_PLAYER, BoardObjectType.RED_PLAYER -> {
+            val fill = if (obj.type == BoardObjectType.BLUE_PLAYER) Color(0xFF40C4FF) else Color(0xFFFF5252)
+            drawCircle(fill, r, Offset(cx, cy))
+            selectedRing?.let { drawCircle(it, r + 4f, Offset(cx, cy), style = Stroke(width = 3f)) }
+            val number = obj.number.orEmpty()
+            if (number.isNotBlank()) {
+                drawContext.canvas.nativeCanvas.drawText(
+                    number,
+                    cx,
+                    cy + r * 0.35f,
+                    android.graphics.Paint().apply {
+                        color = android.graphics.Color.WHITE
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        textSize = r * 0.9f
+                        isFakeBoldText = true
+                    }
+                )
+            }
+        }
+        BoardObjectType.BALL -> {
+            val ballR = min * 0.015f
+            drawFootball(Offset(cx, cy), ballR)
+            selectedRing?.let { drawCircle(it, ballR + 4f, Offset(cx, cy), style = Stroke(width = 2.5f)) }
+        }
+        BoardObjectType.CONE -> {
+            val path = Path().apply {
+                moveTo(cx, cy - r)
+                lineTo(cx - r * 0.7f, cy + r * 0.7f)
+                lineTo(cx + r * 0.7f, cy + r * 0.7f)
+                close()
+            }
+            drawPath(path, Color(0xFFFF9800))
+            selectedRing?.let { drawCircle(it, r + 4f, Offset(cx, cy), style = Stroke(width = 3f)) }
+        }
+        BoardObjectType.GOAL, BoardObjectType.MINI_GOAL -> {
+            val isFull = obj.type == BoardObjectType.GOAL
+            val w = if (isFull) min * 0.16f else min * 0.09f
+            val h = if (isFull) min * 0.14f else min * 0.08f
+            drawFootballGoal(Offset(cx, cy), w, h)
+            selectedRing?.let {
+                drawCircle(it, maxOf(w, h) * 0.72f, Offset(cx, cy), style = Stroke(width = 3f))
+            }
+        }
+        BoardObjectType.TEXT -> {
+            val label = obj.text.orEmpty()
+            if (label.isNotBlank()) {
+                drawContext.canvas.nativeCanvas.drawText(
+                    label,
+                    cx,
+                    cy,
+                    android.graphics.Paint().apply {
+                        color = (obj.colorArgb ?: PizarraColors.WHITE).toInt()
+                        textAlign = android.graphics.Paint.Align.CENTER
+                        textSize = min * 0.035f
+                        isFakeBoldText = true
+                    }
+                )
+            }
+            selectedRing?.let { drawCircle(it, r + 6f, Offset(cx, cy), style = Stroke(width = 3f)) }
+        }
+        BoardObjectType.PATH, BoardObjectType.ARROW, BoardObjectType.OVAL, BoardObjectType.ERASER -> {
+            val tool = when (obj.type) {
+                BoardObjectType.ARROW -> DrawTool.ARROW
+                BoardObjectType.OVAL -> DrawTool.OVAL
+                BoardObjectType.ERASER -> DrawTool.ERASER
+                else -> DrawTool.PEN
+            }
+            drawStrokeNormalized(
+                DrawStroke(
+                    tool = tool,
+                    colorArgb = obj.colorArgb ?: PizarraColors.WHITE,
+                    width = obj.width ?: 8f,
+                    points = obj.points.map { BoardPoint(it.x, it.y) }
+                )
+            )
+        }
+    }
+}
+
+private fun DrawScope.drawFootballGoal(center: Offset, frontW: Float, frontH: Float) {
+    val depthX = frontW * 0.42f
+    val depthY = frontH * 0.22f
+    val backScale = 0.74f
+    fun backOf(front: Offset): Offset {
+        val from = Offset(front.x - center.x, front.y - center.y)
+        return Offset(
+            center.x + from.x * backScale + depthX,
+            center.y + from.y * backScale - depthY
+        )
+    }
+    val fl = Offset(center.x - frontW / 2f, center.y - frontH / 2f)
+    val fr = Offset(center.x + frontW / 2f, center.y - frontH / 2f)
+    val bl = Offset(center.x - frontW / 2f, center.y + frontH / 2f)
+    val br = Offset(center.x + frontW / 2f, center.y + frontH / 2f)
+    val bfl = backOf(fl)
+    val bfr = backOf(fr)
+    val bbl = backOf(bl)
+    val bbr = backOf(br)
+
+    val frame = Color.White
+    val net = Color.White.copy(alpha = 0.78f)
+    val frameW = (minOf(frontW, frontH) * 0.055f).coerceAtLeast(2.6f)
+    val netW = (minOf(frontW, frontH) * 0.012f).coerceAtLeast(0.8f)
+
+    drawQuadNet(fl, fr, bfr, bfl, 5, 4, net, netW)
+    drawQuadNet(bfl, bfr, bbr, bbl, 5, 6, net, netW)
+    drawQuadNet(fl, bfl, bbl, bl, 4, 6, net, netW)
+    drawQuadNet(fr, bfr, bbr, br, 4, 6, net, netW)
+
+    drawLine(frame, fl, fr, frameW, StrokeCap.Round)
+    drawLine(frame, fl, bl, frameW, StrokeCap.Round)
+    drawLine(frame, fr, br, frameW, StrokeCap.Round)
+    drawLine(frame, bfl, bfr, frameW * 0.85f, StrokeCap.Round)
+    drawLine(frame, bbl, bbr, frameW * 0.85f, StrokeCap.Round)
+    drawLine(frame, bfl, bbl, frameW * 0.85f, StrokeCap.Round)
+    drawLine(frame, bfr, bbr, frameW * 0.85f, StrokeCap.Round)
+    drawLine(frame, fl, bfl, frameW * 0.9f, StrokeCap.Round)
+    drawLine(frame, fr, bfr, frameW * 0.9f, StrokeCap.Round)
+    drawLine(frame, bl, bbl, frameW * 0.9f, StrokeCap.Round)
+    drawLine(frame, br, bbr, frameW * 0.9f, StrokeCap.Round)
+}
+
+private fun DrawScope.drawQuadNet(
+    a: Offset,
+    b: Offset,
+    c: Offset,
+    d: Offset,
+    linesU: Int,
+    linesV: Int,
+    color: Color,
+    stroke: Float
+) {
+    val clip = Path().apply {
+        moveTo(a.x, a.y)
+        lineTo(b.x, b.y)
+        lineTo(c.x, c.y)
+        lineTo(d.x, d.y)
+        close()
+    }
+    clipPath(clip) {
+        for (i in 1 until linesU) {
+            val t = i / linesU.toFloat()
+            drawLine(color, lerpOffset(a, b, t), lerpOffset(d, c, t), stroke)
+        }
+        for (j in 1 until linesV) {
+            val t = j / linesV.toFloat()
+            drawLine(color, lerpOffset(a, d, t), lerpOffset(b, c, t), stroke)
+        }
+    }
+}
+
+private fun lerpOffset(a: Offset, b: Offset, t: Float): Offset =
+    Offset(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+
+private fun DrawScope.drawFootball(center: Offset, radius: Float) {
+    val leather = Color(0xFFF7F5F0)
+    val patch = Color(0xFF111111)
+    val seamWidth = (radius * 0.08f).coerceAtLeast(1.1f)
+    val outline = Path().apply {
+        addOval(Rect(center.x - radius, center.y - radius, center.x + radius, center.y + radius))
+    }
+
+    drawCircle(leather, radius, center)
+    drawCircle(Color.White, radius, center, style = Stroke(width = seamWidth * 0.7f))
+
+    val pentagonR = radius * 0.32f
+    val vertexAngles = FloatArray(5) { i -> (-PI / 2.0 + i * 2.0 * PI / 5.0).toFloat() }
+    drawPath(regularPolygon(center, pentagonR, vertexAngles[0], 5), patch)
+
+    clipPath(outline) {
+        vertexAngles.forEach { angle ->
+            val outerCenter = Offset(
+                center.x + radius * 0.86f * cos(angle),
+                center.y + radius * 0.86f * sin(angle)
+            )
+            drawPath(regularPolygon(outerCenter, radius * 0.26f, angle), patch)
+        }
+    }
+
+    vertexAngles.forEach { angle ->
+        val vx = center.x + pentagonR * cos(angle)
+        val vy = center.y + pentagonR * sin(angle)
+        val left = angle - 0.36f
+        val right = angle + 0.36f
+        val rim = radius * 0.92f
+        drawLine(patch, Offset(vx, vy), Offset(center.x + rim * cos(left), center.y + rim * sin(left)), seamWidth, StrokeCap.Round)
+        drawLine(patch, Offset(vx, vy), Offset(center.x + rim * cos(right), center.y + rim * sin(right)), seamWidth, StrokeCap.Round)
+        val mid = angle + (2.0 * PI / 5.0).toFloat() / 2f
+        drawLine(
+            patch,
+            Offset(center.x + rim * cos(right), center.y + rim * sin(right)),
+            Offset(center.x + radius * 0.70f * cos(mid), center.y + radius * 0.70f * sin(mid)),
+            seamWidth * 0.85f,
+            StrokeCap.Round
+        )
+    }
+    drawCircle(patch, radius, center, style = Stroke(width = seamWidth * 0.9f))
+}
+
+private fun regularPolygon(center: Offset, radius: Float, rotation: Float, sides: Int): Path {
+    val path = Path()
+    val step = (2.0 * PI / sides).toFloat()
+    for (i in 0 until sides) {
+        val a = rotation + i * step
+        val x = center.x + radius * cos(a)
+        val y = center.y + radius * sin(a)
+        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    path.close()
+    return path
 }
 
 private fun DrawScope.drawStroke(stroke: DrawStroke) {

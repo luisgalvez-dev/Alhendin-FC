@@ -21,6 +21,8 @@ import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.StatisticType
 import com.luis.alhendinfc.ui.calendar.CalendarScreen
 import com.luis.alhendinfc.ui.calendar.CalendarViewModel
+import com.luis.alhendinfc.ui.calendar.MonthCalendarScreen
+import com.luis.alhendinfc.ui.calendar.MonthCalendarViewModel
 import com.luis.alhendinfc.ui.home.HomeScreen
 import com.luis.alhendinfc.ui.home.HomeViewModel
 import com.luis.alhendinfc.ui.live.LiveMatchScreen
@@ -28,8 +30,14 @@ import com.luis.alhendinfc.ui.live.LiveMatchViewModel
 import com.luis.alhendinfc.ui.matches.MatchListScreen
 import com.luis.alhendinfc.ui.matches.MatchSetupScreen
 import com.luis.alhendinfc.ui.matches.MatchViewModel
+import com.luis.alhendinfc.ui.pizarra.BoardListScreen
+import com.luis.alhendinfc.ui.pizarra.BoardListViewModel
 import com.luis.alhendinfc.ui.pizarra.PizarraScreen
 import com.luis.alhendinfc.ui.pizarra.PizarraViewModel
+import com.luis.alhendinfc.ui.rivals.RivalDetailScreen
+import com.luis.alhendinfc.ui.rivals.RivalDetailViewModel
+import com.luis.alhendinfc.ui.rivals.RivalListScreen
+import com.luis.alhendinfc.ui.rivals.RivalListViewModel
 import com.luis.alhendinfc.ui.players.PlayerDetailScreen
 import com.luis.alhendinfc.ui.players.PlayerEditDialog
 import com.luis.alhendinfc.ui.players.PlayerListScreen
@@ -44,6 +52,8 @@ import com.luis.alhendinfc.ui.tasks.TaskListScreen
 import com.luis.alhendinfc.ui.tasks.TaskViewModel
 import com.luis.alhendinfc.ui.team.TeamScreen
 import com.luis.alhendinfc.ui.team.TeamViewModel
+import com.luis.alhendinfc.ui.training.TrainingEditScreen
+import com.luis.alhendinfc.ui.training.TrainingEditViewModel
 
 sealed class AppScreen(val route: String) {
     object Home : AppScreen("home")
@@ -61,8 +71,21 @@ sealed class AppScreen(val route: String) {
     object Calendar : AppScreen("calendar/{teamId}") {
         fun createRoute(teamId: Int) = "calendar/$teamId"
     }
+    object Fixtures : AppScreen("fixtures/{teamId}") {
+        fun createRoute(teamId: Int) = "fixtures/$teamId"
+    }
+    object TrainingEdit : AppScreen("training/{teamId}?trainingId={trainingId}&epochDay={epochDay}") {
+        fun createRoute(teamId: Int, trainingId: Int = -1, epochDay: Long = -1L) =
+            "training/$teamId?trainingId=$trainingId&epochDay=$epochDay"
+    }
     object Tasks : AppScreen("tasks/{teamId}") {
         fun createRoute(teamId: Int) = "tasks/$teamId"
+    }
+    object Rivals : AppScreen("rivals/{teamId}") {
+        fun createRoute(teamId: Int) = "rivals/$teamId"
+    }
+    object RivalDetail : AppScreen("rival/{teamId}/{clubId}") {
+        fun createRoute(teamId: Int, clubId: Int) = "rival/$teamId/$clubId"
     }
     object LiveMatch : AppScreen("live/{teamId}/{matchId}") {
         fun createRoute(teamId: Int, matchId: Int) = "live/$teamId/$matchId"
@@ -74,7 +97,13 @@ sealed class AppScreen(val route: String) {
         fun createRoute(teamId: Int) = "settings/$teamId"
     }
     object CustomizeHome : AppScreen("customize_home")
-    object Pizarra : AppScreen("pizarra")
+    object Pizarra : AppScreen("pizarra/{teamId}") {
+        fun createRoute(teamId: Int) = "pizarra/$teamId"
+    }
+    object PizarraEditor : AppScreen("pizarra/{teamId}/edit/{boardId}?taskId={taskId}") {
+        fun createRoute(teamId: Int, boardId: Int, taskId: Int = -1) =
+            "pizarra/$teamId/edit/$boardId?taskId=$taskId"
+    }
 }
 
 @Composable
@@ -120,8 +149,13 @@ fun AlhendinNavGraph(navController: NavHostController) {
                     val teamId = selectedTeam?.id ?: return@HomeScreen
                     navController.navigate(AppScreen.Tasks.createRoute(teamId))
                 },
+                onNavigateToRivals = {
+                    val teamId = selectedTeam?.id ?: return@HomeScreen
+                    navController.navigate(AppScreen.Rivals.createRoute(teamId))
+                },
                 onNavigateToPizarra = {
-                    navController.navigate(AppScreen.Pizarra.route)
+                    val teamId = selectedTeam?.id ?: return@HomeScreen
+                    navController.navigate(AppScreen.Pizarra.createRoute(teamId))
                 },
                 onNavigateToStatistics = {
                     val teamId = selectedTeam?.id ?: return@HomeScreen
@@ -211,13 +245,67 @@ fun AlhendinNavGraph(navController: NavHostController) {
             arguments = listOf(navArgument("teamId") { type = NavType.IntType })
         ) { backStack ->
             val teamId = backStack.arguments!!.getInt("teamId")
+            MonthCalendarRoute(
+                teamId = teamId,
+                team = selectedTeam,
+                onBack = { navController.popBackStack() },
+                onOpenMatch = { matchId ->
+                    navController.navigate(AppScreen.Matches.createRoute(teamId, matchId))
+                },
+                onOpenTraining = { trainingId ->
+                    navController.navigate(AppScreen.TrainingEdit.createRoute(teamId, trainingId))
+                },
+                onAddTraining = { epochDay ->
+                    navController.navigate(
+                        AppScreen.TrainingEdit.createRoute(teamId, trainingId = -1, epochDay = epochDay)
+                    )
+                },
+                onOpenFixtures = {
+                    navController.navigate(AppScreen.Fixtures.createRoute(teamId))
+                }
+            )
+        }
+
+        composable(
+            route = AppScreen.Fixtures.route,
+            arguments = listOf(navArgument("teamId") { type = NavType.IntType })
+        ) { backStack ->
+            val teamId = backStack.arguments!!.getInt("teamId")
             CalendarRoute(
                 teamId = teamId,
                 team = selectedTeam,
                 onBack = { navController.popBackStack() },
                 onOpenMatch = { matchId ->
                     navController.navigate(AppScreen.Matches.createRoute(teamId, matchId))
+                },
+                onOpenRivals = {
+                    navController.navigate(AppScreen.Rivals.createRoute(teamId))
                 }
+            )
+        }
+
+        composable(
+            route = AppScreen.TrainingEdit.route,
+            arguments = listOf(
+                navArgument("teamId") { type = NavType.IntType },
+                navArgument("trainingId") {
+                    type = NavType.IntType
+                    defaultValue = -1
+                },
+                navArgument("epochDay") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                }
+            )
+        ) { backStack ->
+            val teamId = backStack.arguments!!.getInt("teamId")
+            val trainingId = backStack.arguments!!.getInt("trainingId")
+            val epochDay = backStack.arguments!!.getLong("epochDay")
+            TrainingRoute(
+                teamId = teamId,
+                trainingId = trainingId,
+                epochDay = epochDay,
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -229,6 +317,38 @@ fun AlhendinNavGraph(navController: NavHostController) {
             TasksRoute(
                 teamId = teamId,
                 team = selectedTeam,
+                onOpenBoard = { boardId, taskId ->
+                    navController.navigate(AppScreen.PizarraEditor.createRoute(teamId, boardId, taskId))
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = AppScreen.Rivals.route,
+            arguments = listOf(navArgument("teamId") { type = NavType.IntType })
+        ) { backStack ->
+            val teamId = backStack.arguments!!.getInt("teamId")
+            RivalsRoute(
+                teamId = teamId,
+                team = selectedTeam,
+                onOpenClub = { clubId ->
+                    navController.navigate(AppScreen.RivalDetail.createRoute(teamId, clubId))
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = AppScreen.RivalDetail.route,
+            arguments = listOf(
+                navArgument("teamId") { type = NavType.IntType },
+                navArgument("clubId") { type = NavType.IntType }
+            )
+        ) { backStack ->
+            val clubId = backStack.arguments!!.getInt("clubId")
+            RivalDetailRoute(
+                clubId = clubId,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -285,8 +405,37 @@ fun AlhendinNavGraph(navController: NavHostController) {
             CustomizeHomeRoute(onBack = { navController.popBackStack() })
         }
 
-        composable(AppScreen.Pizarra.route) {
-            PizarraRoute(onBack = { navController.popBackStack() })
+        composable(
+            route = AppScreen.Pizarra.route,
+            arguments = listOf(navArgument("teamId") { type = NavType.IntType })
+        ) { backStack ->
+            val teamId = backStack.arguments!!.getInt("teamId")
+            BoardLibraryRoute(
+                teamId = teamId,
+                onBack = { navController.popBackStack() },
+                onOpen = { boardId ->
+                    navController.navigate(AppScreen.PizarraEditor.createRoute(teamId, boardId))
+                }
+            )
+        }
+
+        composable(
+            route = AppScreen.PizarraEditor.route,
+            arguments = listOf(
+                navArgument("teamId") { type = NavType.IntType },
+                navArgument("boardId") { type = NavType.IntType },
+                navArgument("taskId") { type = NavType.IntType; defaultValue = -1 }
+            )
+        ) { backStack ->
+            val teamId = backStack.arguments!!.getInt("teamId")
+            val boardId = backStack.arguments!!.getInt("boardId")
+            val taskId = backStack.arguments!!.getInt("taskId")
+            PizarraRoute(
+                teamId = teamId,
+                boardId = boardId,
+                taskId = taskId,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }
@@ -434,6 +583,7 @@ private fun MatchesRoute(
 private fun TasksRoute(
     teamId: Int,
     team: com.luis.alhendinfc.domain.model.Team?,
+    onOpenBoard: (boardId: Int, taskId: Int) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -443,15 +593,181 @@ private fun TasksRoute(
     )
     val tasks by vm.tasks.collectAsStateWithLifecycle()
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
+    val taskImages by vm.taskImages.collectAsStateWithLifecycle()
+    val boards by vm.boardsState.collectAsStateWithLifecycle()
 
     TaskListScreen(
         team = team,
         tasks = tasks,
+        taskImages = taskImages,
+        boards = boards,
         searchQuery = searchQuery,
         onSearchChange = vm::setQuery,
-        onAdd = vm::add,
-        onUpdate = vm::update,
+        onAdd = { task, imageUri -> vm.add(task, imageUri) },
+        onUpdate = { task, imageUri, remove -> vm.update(task, imageUri, remove) },
         onDelete = vm::delete,
+        onCreateBoard = { task -> vm.createBoardForTask(task) { id -> onOpenBoard(id, task.id) } },
+        onAssignBoard = vm::assignBoard,
+        onOpenBoard = { board -> onOpenBoard(board.id, -1) },
+        onClearBoard = vm::clearBoard,
+        onBack = onBack
+    )
+}
+
+@Composable
+private fun RivalsRoute(
+    teamId: Int,
+    team: com.luis.alhendinfc.domain.model.Team?,
+    onOpenClub: (Int) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val vm: RivalListViewModel = viewModel(
+        key = "rivals_$teamId",
+        factory = RivalListViewModel.factory(context.applicationContext, teamId)
+    )
+    val clubs by vm.clubs.collectAsStateWithLifecycle()
+    val query by vm.query.collectAsStateWithLifecycle()
+    RivalListScreen(
+        team = team,
+        clubs = clubs,
+        searchQuery = query,
+        onSearchChange = vm::setQuery,
+        onOpenClub = { onOpenClub(it.id) },
+        onAddClub = { name, shortName, stadium, shield, kit ->
+            vm.addClub(name, shortName, stadium, shield, kit) { id -> onOpenClub(id) }
+        },
+        onDeleteClub = vm::deleteClub,
+        onBack = onBack
+    )
+}
+
+@Composable
+private fun RivalDetailRoute(
+    clubId: Int,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val vm: RivalDetailViewModel = viewModel(
+        key = "rival_$clubId",
+        factory = RivalDetailViewModel.factory(context.applicationContext, clubId)
+    )
+    val club by vm.club.collectAsStateWithLifecycle()
+    val analysis by vm.analysis.collectAsStateWithLifecycle()
+    val players by vm.players.collectAsStateWithLifecycle()
+    val playerQuery by vm.playerSearch.collectAsStateWithLifecycle()
+    val links by vm.links.collectAsStateWithLifecycle()
+    val attachments by vm.attachments.collectAsStateWithLifecycle()
+    RivalDetailScreen(
+        club = club,
+        analysis = analysis,
+        players = players,
+        playerQuery = playerQuery,
+        links = links,
+        attachments = attachments,
+        onSaveClub = vm::saveClub,
+        onSaveAnalysis = vm::saveAnalysis,
+        onPlayerQuery = vm::setPlayerQuery,
+        onAddPlayer = vm::addPlayer,
+        onUpdatePlayer = vm::updatePlayer,
+        onDeletePlayer = vm::deletePlayer,
+        onAddLink = vm::addLink,
+        onUpdateLink = vm::updateLink,
+        onDeleteLink = vm::deleteLink,
+        onMoveLink = vm::moveLink,
+        onAddFile = vm::addFile,
+        onDeleteAttachment = vm::deleteAttachment,
+        onBack = onBack
+    )
+}
+
+@Composable
+private fun MonthCalendarRoute(
+    teamId: Int,
+    team: com.luis.alhendinfc.domain.model.Team?,
+    onBack: () -> Unit,
+    onOpenMatch: (matchId: Int) -> Unit,
+    onOpenTraining: (trainingId: Int) -> Unit,
+    onAddTraining: (epochDay: Long) -> Unit,
+    onOpenFixtures: () -> Unit
+) {
+    val context = LocalContext.current
+    val vm: MonthCalendarViewModel = viewModel(
+        key = "month_calendar_$teamId",
+        factory = MonthCalendarViewModel.factory(context.applicationContext, teamId)
+    )
+    val visibleMonth by vm.visibleMonth.collectAsStateWithLifecycle()
+    val dayContents by vm.dayContents.collectAsStateWithLifecycle()
+
+    MonthCalendarScreen(
+        team = team,
+        visibleMonth = visibleMonth,
+        dayContents = dayContents,
+        onPreviousMonth = vm::previousMonth,
+        onNextMonth = vm::nextMonth,
+        onGoToToday = vm::goToToday,
+        onOpenMatch = onOpenMatch,
+        onPrepareFixture = { row ->
+            vm.openOrPrepareMatch(row) { matchId -> onOpenMatch(matchId) }
+        },
+        onOpenTraining = onOpenTraining,
+        onAddTraining = onAddTraining,
+        onOpenFixtures = onOpenFixtures,
+        onBack = onBack
+    )
+}
+
+@Composable
+private fun TrainingRoute(
+    teamId: Int,
+    trainingId: Int,
+    epochDay: Long,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val vm: TrainingEditViewModel = viewModel(
+        key = "training_${teamId}_${trainingId}_$epochDay",
+        factory = TrainingEditViewModel.factory(
+            context.applicationContext,
+            teamId,
+            trainingId,
+            epochDay
+        )
+    )
+    val training by vm.training.collectAsStateWithLifecycle()
+    val clubs by vm.clubs.collectAsStateWithLifecycle()
+    val libraryTasks by vm.libraryTasks.collectAsStateWithLifecycle()
+    val sessionTasks by vm.sessionTasks.collectAsStateWithLifecycle()
+    val attachments by vm.attachments.collectAsStateWithLifecycle()
+    val pendingFiles by vm.pendingFiles.collectAsStateWithLifecycle()
+    val opponentClubId by vm.opponentClubId.collectAsStateWithLifecycle()
+    val notes by vm.notes.collectAsStateWithLifecycle()
+    val error by vm.error.collectAsStateWithLifecycle()
+    val busy by vm.busy.collectAsStateWithLifecycle()
+
+    TrainingEditScreen(
+        isNew = vm.isNew,
+        dateLabel = vm.dateLabel,
+        training = training,
+        clubs = clubs,
+        libraryTasks = libraryTasks,
+        sessionTasks = sessionTasks,
+        attachments = attachments,
+        pendingFiles = pendingFiles,
+        opponentClubId = opponentClubId,
+        notes = notes,
+        error = error,
+        busy = busy,
+        onOpponentChange = vm::setOpponentClubId,
+        onNotesChange = vm::setNotes,
+        onAddTask = vm::addTask,
+        onRemoveTask = vm::removeTask,
+        onMoveTask = vm::moveTask,
+        onAddFile = vm::addPendingFile,
+        onRemovePendingFile = vm::removePendingFile,
+        onDeleteAttachment = vm::deleteAttachment,
+        onSave = { vm.save { onBack() } },
+        onDelete = { vm.deleteTraining { onBack() } },
         onBack = onBack
     )
 }
@@ -461,7 +777,8 @@ private fun CalendarRoute(
     teamId: Int,
     team: com.luis.alhendinfc.domain.model.Team?,
     onBack: () -> Unit,
-    onOpenMatch: (matchId: Int) -> Unit
+    onOpenMatch: (matchId: Int) -> Unit,
+    onOpenRivals: () -> Unit
 ) {
     val context = LocalContext.current
     val vm: CalendarViewModel = viewModel(
@@ -488,21 +805,56 @@ private fun CalendarRoute(
         onAddClub = vm::addClub,
         onUpdateClub = vm::updateClub,
         onDeleteClub = vm::deleteClub,
+        onOpenRivals = onOpenRivals,
         onBack = onBack
     )
 }
 
 @Composable
-private fun PizarraRoute(onBack: () -> Unit) {
+private fun BoardLibraryRoute(
+    teamId: Int,
+    onBack: () -> Unit,
+    onOpen: (Int) -> Unit
+) {
+    val context = LocalContext.current
+    val vm: BoardListViewModel = viewModel(
+        key = "boards_$teamId",
+        factory = BoardListViewModel.factory(context.applicationContext, teamId)
+    )
+    val boards by vm.boardsState.collectAsStateWithLifecycle()
+    BoardListScreen(
+        boards = boards,
+        onBack = onBack,
+        onOpen = { onOpen(it.id) },
+        onCreate = { name, _ -> vm.create(name) { id -> onOpen(id) } },
+        onRename = { board, name -> vm.rename(board, name) },
+        onDuplicate = { board, _ -> vm.duplicate(board) { id -> onOpen(id) } },
+        onDelete = vm::delete,
+        tasksUsing = vm::tasksUsing
+    )
+}
+
+@Composable
+private fun PizarraRoute(
+    teamId: Int,
+    boardId: Int,
+    taskId: Int,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
     val vm: PizarraViewModel = viewModel(
-        factory = PizarraViewModel.factory(context.applicationContext)
+        key = "board_edit_${boardId}_$taskId",
+        factory = PizarraViewModel.factory(context.applicationContext, boardId, teamId, taskId)
     )
     val state by vm.uiState.collectAsStateWithLifecycle()
 
     PizarraScreen(
         state = state,
-        onBack = onBack,
+        onBack = {
+            if (state.dirty) vm.save()
+            onBack()
+        },
+        onSave = vm::save,
         onTool = vm::setTool,
         onColor = vm::setColor,
         onStrokeWidth = vm::setStrokeWidth,
@@ -512,11 +864,15 @@ private fun PizarraRoute(onBack: () -> Unit) {
         onTogglePlay = { vm.setVideoPlaying(!state.isVideoPlaying) },
         onSeekBack = { vm.seekVideo(-10_000L) },
         onSeekForward = { vm.seekVideo(10_000L) },
-        onStartStroke = vm::startStroke,
-        onUpdateStroke = vm::updateStroke,
-        onFinishStroke = vm::finishStroke,
+        onPress = vm::onPress,
+        onDrag = vm::onDrag,
+        onRelease = vm::onRelease,
         onUndo = vm::undo,
-        onClear = vm::clearAll
+        onClear = vm::clearAll,
+        onPendingText = vm::setPendingText,
+        onDeleteSelected = vm::deleteSelected,
+        onUpdateNumber = vm::updateSelectedNumber,
+        onUpdateText = vm::updateSelectedText
     )
 }
 

@@ -96,11 +96,19 @@ class HomePreferencesRepository(private val dataStore: DataStore<Preferences>) {
                 }
             if (parsed.isEmpty()) return HomeLayoutConfig.defaults()
 
-            val seen = parsed.map { it.module }.toSet()
-            val missing = HomeModule.DEFAULT_ORDER
-                .filter { it !in seen }
-                .map { HomeModulePreference(it, enabled = true) }
-            return HomeLayoutConfig(parsed + missing)
+            val result = parsed.toMutableList()
+            val seen = result.map { it.module }.toMutableSet()
+            HomeModule.DEFAULT_ORDER.forEach { module ->
+                if (module in seen) return@forEach
+                val predecessors = HomeModule.DEFAULT_ORDER.take(
+                    HomeModule.DEFAULT_ORDER.indexOf(module)
+                )
+                val insertAfter = result.indexOfLast { it.module in predecessors }
+                val pref = HomeModulePreference(module, enabled = true)
+                if (insertAfter >= 0) result.add(insertAfter + 1, pref) else result.add(0, pref)
+                seen += module
+            }
+            return HomeLayoutConfig(result)
         }
 
         fun getInstance(context: Context): HomePreferencesRepository =

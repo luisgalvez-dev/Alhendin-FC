@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
@@ -82,6 +83,7 @@ fun HomeScreen(
     onNavigateToMatches: () -> Unit,
     onNavigateToCalendar: () -> Unit,
     onNavigateToTasks: () -> Unit,
+    onNavigateToRivals: () -> Unit,
     onNavigateToPizarra: () -> Unit,
     onNavigateToStatistics: () -> Unit,
     onNavigateToSettings: () -> Unit,
@@ -168,6 +170,7 @@ fun HomeScreen(
                                     onNavigateToMatches = onNavigateToMatches,
                                     onNavigateToCalendar = onNavigateToCalendar,
                                     onNavigateToTasks = onNavigateToTasks,
+                                    onNavigateToRivals = onNavigateToRivals,
                                     onNavigateToPizarra = onNavigateToPizarra,
                                     onNavigateToStatistics = onNavigateToStatistics,
                                     onNavigateToSettings = onNavigateToSettings,
@@ -200,6 +203,7 @@ private fun HomeModuleCard(
     onNavigateToMatches: () -> Unit,
     onNavigateToCalendar: () -> Unit,
     onNavigateToTasks: () -> Unit,
+    onNavigateToRivals: () -> Unit,
     onNavigateToPizarra: () -> Unit,
     onNavigateToStatistics: () -> Unit,
     onNavigateToSettings: () -> Unit,
@@ -246,6 +250,16 @@ private fun HomeModuleCard(
             gradient = listOf(Color(0xFF123528), Color(0xFF1E5A40)),
             lockedLabel = if (!hasTeam) lockedHint else null,
             onClick = onNavigateToTasks,
+            modifier = modifier
+        )
+        HomeModule.RIVALS -> MainCard(
+            title = module.title,
+            icon = Icons.Default.Place,
+            enabled = hasTeam,
+            accent = TealSoft,
+            gradient = listOf(Color(0xFF123528), Color(0xFF1F5A45)),
+            lockedLabel = if (!hasTeam) lockedHint else null,
+            onClick = onNavigateToRivals,
             modifier = modifier
         )
         HomeModule.PIZARRA -> MainCard(

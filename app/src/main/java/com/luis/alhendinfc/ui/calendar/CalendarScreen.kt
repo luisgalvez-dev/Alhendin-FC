@@ -117,6 +117,7 @@ fun CalendarScreen(
     onAddClub: (name: String, shortName: String, stadium: String, shieldUri: String?, kitColors: String) -> Unit,
     onUpdateClub: (OpponentClub) -> Unit,
     onDeleteClub: (OpponentClub) -> Unit,
+    onOpenRivals: () -> Unit,
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -252,7 +253,7 @@ fun CalendarScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Calendario", fontWeight = FontWeight.Bold)
+                        Text("Jornadas", fontWeight = FontWeight.Bold)
                         Text(
                             text = team?.name ?: "Sin equipo",
                             style = MaterialTheme.typography.labelMedium,
@@ -338,6 +339,7 @@ fun CalendarScreen(
                 )
                 else -> ClubsTab(
                     clubs = clubs,
+                    onOpenRivals = onOpenRivals,
                     onEdit = { editingClub = it },
                     onDelete = { pendingDelete = it }
                 )
@@ -682,28 +684,29 @@ private fun FixtureEditorDialog(
 @Composable
 private fun ClubsTab(
     clubs: List<OpponentClub>,
+    onOpenRivals: () -> Unit,
     onEdit: (OpponentClub) -> Unit,
     onDelete: (OpponentClub) -> Unit
 ) {
-    if (clubs.isEmpty()) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "Aún no hay clubs rivales.",
-                color = Color.White.copy(alpha = 0.7f)
-            )
-        }
-        return
-    }
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        item {
+            TextButton(onClick = onOpenRivals) {
+                Text("Abrir módulo Rivales")
+            }
+        }
+        if (clubs.isEmpty()) {
+            item {
+                Text(
+                    "Aún no hay clubs rivales.",
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+        }
         items(clubs, key = { it.id }) { club ->
             Card(
                 modifier = Modifier.fillMaxWidth(),

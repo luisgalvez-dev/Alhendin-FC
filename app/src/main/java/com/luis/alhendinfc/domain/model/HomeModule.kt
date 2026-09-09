@@ -24,13 +24,19 @@ enum class HomeModule(
     CALENDAR(
         id = "calendar",
         title = "CALENDARIO",
-        description = "Jornadas de la temporada",
+        description = "Partidos y entrenamientos del mes",
         kind = HomeModuleKind.PRIMARY
     ),
     TASKS(
         id = "tasks",
         title = "TAREAS",
         description = "Ejercicios de entrenamiento reutilizables",
+        kind = HomeModuleKind.PRIMARY
+    ),
+    RIVALS(
+        id = "rivals",
+        title = "RIVALES",
+        description = "Clubs rivales, análisis y archivos",
         kind = HomeModuleKind.PRIMARY
     ),
     PIZARRA(

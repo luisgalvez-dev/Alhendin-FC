@@ -1,5 +1,6 @@
 package com.luis.alhendinfc.ui.tasks
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,47 +35,69 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.luis.alhendinfc.domain.model.Attachment
+import com.luis.alhendinfc.domain.model.Board
 import com.luis.alhendinfc.domain.model.Task
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenMint
+import com.luis.alhendinfc.ui.util.ImageViewer
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskListScreen(
     team: Team?,
     tasks: List<Task>,
+    taskImages: Map<String, Attachment>,
+    boards: List<Board>,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
-    onAdd: (Task) -> Unit,
-    onUpdate: (Task) -> Unit,
+    onAdd: (Task, android.net.Uri?) -> Unit,
+    onUpdate: (Task, android.net.Uri?, Boolean) -> Unit,
     onDelete: (Task) -> Unit,
+    onCreateBoard: (Task) -> Unit,
+    onAssignBoard: (Task, Board) -> Unit,
+    onOpenBoard: (Board) -> Unit,
+    onClearBoard: (Task) -> Unit,
     onBack: () -> Unit
 ) {
     var editing by remember { mutableStateOf<Task?>(null) }
     var creating by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Task?>(null) }
+    var viewingPath by remember { mutableStateOf<String?>(null) }
 
     if (creating || editing != null) {
         TaskEditDialog(
             current = editing,
             teamId = team?.id ?: 0,
-            onConfirm = { task ->
-                if (editing != null) onUpdate(task) else onAdd(task)
+            currentImage = (editing ?: null)?.syncId?.let { taskImages[it] },
+            boards = boards,
+            onConfirm = { task, imageUri, removeImage ->
+                if (editing != null) onUpdate(task, imageUri, removeImage) else onAdd(task, imageUri)
                 creating = false
                 editing = null
             },
+            onCreateBoard = onCreateBoard,
+            onAssignBoard = onAssignBoard,
+            onOpenBoard = onOpenBoard,
+            onClearBoard = onClearBoard,
             onDismiss = {
                 creating = false
                 editing = null
@@ -98,6 +122,12 @@ fun TaskListScreen(
                 TextButton(onClick = { pendingDelete = null }) { Text("Cancelar") }
             }
         )
+    }
+
+    viewingPath?.let { path ->
+        ImageViewer(source = path, title = "Imagen de tarea") {
+            viewingPath = null
+        }
     }
 
     Scaffold(
@@ -166,9 +196,11 @@ fun TaskListScreen(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(tasks, key = { it.id }) { task ->
-                        TaskRow(
+                            TaskRow(
                             task = task,
+                            image = taskImages[task.syncId],
                             onOpen = { editing = task },
+                            onViewImage = { viewingPath = it },
                             onEdit = { editing = task },
                             onDelete = { pendingDelete = task }
                         )
@@ -182,7 +214,9 @@ fun TaskListScreen(
 @Composable
 private fun TaskRow(
     task: Task,
+    image: Attachment?,
     onOpen: () -> Unit,
+    onViewImage: (String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -191,6 +225,11 @@ private fun TaskRow(
         task.playerCount?.let { add("$it jug.") }
         task.durationMinutes?.let { add("$it min") }
     }.joinToString(" · ")
+    val context = LocalContext.current
+    var bitmap by remember(image?.localPath) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(image?.localPath) {
+        bitmap = LocalImageLoader.load(context, image?.localPath, maxSidePx = 96)
+    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2A1E)),
@@ -205,6 +244,20 @@ private fun TaskRow(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap!!,
+                    contentDescription = "Ver imagen",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .padding(end = 10.dp)
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            image?.localPath?.takeIf { it.isNotBlank() }?.let(onViewImage)
+                        }
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     task.name,
