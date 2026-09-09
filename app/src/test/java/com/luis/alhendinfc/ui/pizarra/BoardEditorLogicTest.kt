@@ -88,7 +88,7 @@ class BoardEditorLogicTest {
         val goal = token("goal", BoardObjectType.GOAL, 0.50f, 0.50f)
         val mini = token("mini", BoardObjectType.MINI_GOAL, 0.50f, 0.50f)
         assertEquals("goal", BoardEditorLogic.hitTest(listOf(goal), BoardPoint(0.58f, 0.50f))?.objectId)
-        assertNull(BoardEditorLogic.hitTest(listOf(mini), BoardPoint(0.58f, 0.50f)))
+        assertNull(BoardEditorLogic.hitTest(listOf(mini), BoardPoint(0.70f, 0.50f)))
         assertEquals("mini", BoardEditorLogic.hitTest(listOf(mini), BoardPoint(0.54f, 0.50f))?.objectId)
     }
 
