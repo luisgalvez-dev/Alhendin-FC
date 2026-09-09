@@ -25,6 +25,9 @@ class TaskRepositoryImpl(
     override fun getById(id: Int): Flow<Task?> =
         dao.getById(id).map { it?.toDomain() }
 
+    override suspend fun getOnce(id: Int): Task? =
+        dao.getByIdOnce(id)?.toDomain()
+
     override suspend fun add(task: Task): Int {
         val error = TaskRules.validate(task.name, task.playerCount, task.durationMinutes)
         require(error == null) { error!! }
@@ -36,6 +39,13 @@ class TaskRepositoryImpl(
         require(error == null) { error!! }
         val existing = dao.getByIdOnce(task.id) ?: return
         dao.update(EntityWrites.taskForUpdate(existing, task.toEntity(), EntitySync.now()))
+    }
+
+    override suspend fun setBoardSyncId(taskId: Int, boardSyncId: String?) {
+        val existing = dao.getByIdOnce(taskId) ?: return
+        dao.update(
+            EntityWrites.taskForUpdate(existing, existing.copy(boardSyncId = boardSyncId), EntitySync.now())
+        )
     }
 
     override suspend fun delete(task: Task) {

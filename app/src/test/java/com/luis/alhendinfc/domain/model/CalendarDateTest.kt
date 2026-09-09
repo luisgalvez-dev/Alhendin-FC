@@ -39,4 +39,11 @@ class CalendarDateTest {
         assertTrue(jan < feb)
         assertTrue("31/01/2026" > "01/02/2026")
     }
+
+    @Test
+    fun format_roundTripsVisibleDate() {
+        val epoch = CalendarDate.toEpochDay("08/09/2026")!!
+        assertEquals("08/09/2026", CalendarDate.format(epoch))
+        assertEquals(epoch, CalendarDate.toEpochDay(CalendarDate.format(epoch)))
+    }
 }

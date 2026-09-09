@@ -185,6 +185,169 @@ object EntityWrites {
             updatedAt = now
         )
 
+    fun trainingForInsert(training: TrainingEntity, now: Long): TrainingEntity {
+        val stamp = EntitySync.stampInsert(now)
+        val epoch = CalendarDate.toEpochDay(training.date)
+            ?: error("La fecha del entrenamiento no es válida")
+        return training.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null,
+            dateEpochDay = epoch
+        )
+    }
+
+    fun trainingForUpdate(existing: TrainingEntity, incoming: TrainingEntity, now: Long): TrainingEntity =
+        incoming.copy(
+            id = existing.id,
+            syncId = existing.syncId,
+            createdAt = existing.createdAt,
+            deletedAt = existing.deletedAt,
+            updatedAt = now,
+            date = existing.date,
+            dateEpochDay = existing.dateEpochDay,
+            teamId = existing.teamId
+        )
+
+    fun trainingTaskForInsert(row: TrainingTaskEntity, now: Long): TrainingTaskEntity {
+        val stamp = EntitySync.stampInsert(now)
+        return row.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
+    }
+
+    fun trainingTaskForRevive(existing: TrainingTaskEntity, sortOrder: Int, now: Long): TrainingTaskEntity =
+        existing.copy(deletedAt = null, updatedAt = now, sortOrder = sortOrder)
+
+    fun rivalAnalysisForInsert(row: RivalAnalysisEntity, now: Long): RivalAnalysisEntity {
+        val stamp = EntitySync.stampInsert(now)
+        return row.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
+    }
+
+    fun rivalAnalysisForUpdate(
+        existing: RivalAnalysisEntity,
+        incoming: RivalAnalysisEntity,
+        now: Long
+    ): RivalAnalysisEntity =
+        incoming.copy(
+            id = existing.id,
+            opponentClubId = existing.opponentClubId,
+            syncId = existing.syncId,
+            createdAt = existing.createdAt,
+            deletedAt = existing.deletedAt,
+            updatedAt = now
+        )
+
+    fun rivalAnalysisForRevive(
+        existing: RivalAnalysisEntity,
+        incoming: RivalAnalysisEntity,
+        now: Long
+    ): RivalAnalysisEntity =
+        rivalAnalysisForUpdate(existing, incoming, now).copy(deletedAt = null, updatedAt = now)
+
+    fun rivalLinkForInsert(row: RivalLinkEntity, now: Long): RivalLinkEntity {
+        val stamp = EntitySync.stampInsert(now)
+        return row.copy(
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
+    }
+
+    fun rivalLinkForUpdate(
+        existing: RivalLinkEntity,
+        incoming: RivalLinkEntity,
+        now: Long
+    ): RivalLinkEntity =
+        incoming.copy(
+            id = existing.id,
+            opponentClubId = existing.opponentClubId,
+            syncId = existing.syncId,
+            createdAt = existing.createdAt,
+            deletedAt = existing.deletedAt,
+            updatedAt = now
+        )
+
+    fun rivalLinkForRevive(
+        existing: RivalLinkEntity,
+        incoming: RivalLinkEntity,
+        now: Long
+    ): RivalLinkEntity =
+        rivalLinkForUpdate(existing, incoming, now).copy(deletedAt = null, updatedAt = now)
+
+    fun opponentPlayerForInsert(row: OpponentPlayerEntity, now: Long): OpponentPlayerEntity {
+        val stamp = EntitySync.stampInsert(now)
+        return row.copy(
+            name = row.name.trim(),
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
+    }
+
+    fun opponentPlayerForUpdate(
+        existing: OpponentPlayerEntity,
+        incoming: OpponentPlayerEntity,
+        now: Long
+    ): OpponentPlayerEntity =
+        incoming.copy(
+            id = existing.id,
+            opponentClubId = existing.opponentClubId,
+            name =             incoming.name.trim(),
+            syncId = existing.syncId,
+            createdAt = existing.createdAt,
+            deletedAt = existing.deletedAt,
+            updatedAt = now
+        )
+
+    fun boardForInsert(row: BoardEntity, now: Long): BoardEntity {
+        val stamp = EntitySync.stampInsert(now)
+        return row.copy(
+            name = row.name.trim(),
+            syncId = stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null
+        )
+    }
+
+    fun boardForUpdate(
+        existing: BoardEntity,
+        incoming: BoardEntity,
+        now: Long
+    ): BoardEntity =
+        incoming.copy(
+            id = existing.id,
+            teamId = existing.teamId,
+            name = incoming.name.trim(),
+            syncId = existing.syncId,
+            createdAt = existing.createdAt,
+            deletedAt = existing.deletedAt,
+            updatedAt = now
+        )
+
+    fun attachmentForInsert(row: AttachmentEntity, now: Long): AttachmentEntity {
+        val stamp = EntitySync.stampInsert(now)
+        return row.copy(
+            syncId = if (row.syncId.isNotBlank()) row.syncId else stamp.syncId,
+            createdAt = stamp.createdAt,
+            updatedAt = stamp.updatedAt,
+            deletedAt = null,
+            remotePath = null
+        )
+    }
+
     fun <T> applyTombstone(copy: (deletedAt: Long, updatedAt: Long) -> T, now: Long): T {
         val stamp = EntitySync.stampTombstone(now)
         return copy(stamp.deletedAt!!, stamp.updatedAt)

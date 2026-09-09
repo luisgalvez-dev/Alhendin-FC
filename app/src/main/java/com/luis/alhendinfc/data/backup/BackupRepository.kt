@@ -3,16 +3,25 @@ package com.luis.alhendinfc.data.backup
 import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
+import com.luis.alhendinfc.data.files.AndroidAttachmentStore
+import com.luis.alhendinfc.data.files.DiskFileStore
 import com.luis.alhendinfc.data.local.AlhendinDatabase
+import com.luis.alhendinfc.data.local.AttachmentEntity
+import com.luis.alhendinfc.data.local.BoardEntity
 import com.luis.alhendinfc.data.local.CustomStatTypeEntity
 import com.luis.alhendinfc.data.local.MatchEntity
 import com.luis.alhendinfc.data.local.MatchEventEntity
 import com.luis.alhendinfc.data.local.MatchPlayerEntity
 import com.luis.alhendinfc.data.local.OpponentClubEntity
+import com.luis.alhendinfc.data.local.OpponentPlayerEntity
 import com.luis.alhendinfc.data.local.PlayerEntity
+import com.luis.alhendinfc.data.local.RivalAnalysisEntity
+import com.luis.alhendinfc.data.local.RivalLinkEntity
 import com.luis.alhendinfc.data.local.SeasonFixtureEntity
 import com.luis.alhendinfc.data.local.TaskEntity
 import com.luis.alhendinfc.data.local.TeamEntity
+import com.luis.alhendinfc.data.local.TrainingEntity
+import com.luis.alhendinfc.data.local.TrainingTaskEntity
 import com.luis.alhendinfc.data.preferences.HomePreferencesRepository
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -48,6 +57,13 @@ class BackupRepository(
         val opponentClubs: Int,
         val fixtures: Int,
         val tasks: Int = 0,
+        val trainings: Int = 0,
+        val trainingTasks: Int = 0,
+        val attachments: Int = 0,
+        val rivalAnalyses: Int = 0,
+        val rivalLinks: Int = 0,
+        val opponentPlayers: Int = 0,
+        val boards: Int = 0,
         val mediaFiles: Int
     ) {
         fun asMessage(prefix: String): String =
@@ -61,6 +77,13 @@ class BackupRepository(
                 "Clubs rivales: $opponentClubs\n" +
                 "Jornadas: $fixtures\n" +
                 "Tareas: $tasks\n" +
+                "Entrenamientos: $trainings\n" +
+                "Tareas de sesión: $trainingTasks\n" +
+                "Archivos: $attachments\n" +
+                "Análisis de rival: $rivalAnalyses\n" +
+                "Enlaces de rival: $rivalLinks\n" +
+                "Plantilla rival: $opponentPlayers\n" +
+                "Pizarras: $boards\n" +
                 "Archivos media: $mediaFiles"
     }
 
@@ -85,6 +108,7 @@ class BackupRepository(
                         if (!entry.isDirectory &&
                             (name == "backup.json" ||
                                 name.startsWith("media/") ||
+                                name.startsWith("attachments/") ||
                                 name.startsWith("database/"))
                         ) {
                             val out = File(extractDir, name)
@@ -108,9 +132,15 @@ class BackupRepository(
 
             incomingTag = "restore_${System.currentTimeMillis()}"
             val mediaMap = copyIncomingMedia(extractDir, incomingTag)
+            val attachmentRoot = File(context.filesDir, AndroidAttachmentStore.DIR)
+            val restoredAttachments = remapRestoredAttachments(
+                extractDir,
+                payload.attachments,
+                DiskFileStore(attachmentRoot)
+            )
             val resolved = payload.withResolvedUris { value ->
                 if (value.isNullOrBlank()) null else mediaMap[value] ?: value
-            }
+            }.copy(attachments = restoredAttachments)
 
             try {
                 val db = AlhendinDatabase.getInstance(context)
@@ -131,6 +161,13 @@ class BackupRepository(
                 opponentClubs = resolved.counts.opponentClubs,
                 fixtures = resolved.counts.fixtures,
                 tasks = resolved.counts.tasks,
+                trainings = resolved.counts.trainings,
+                trainingTasks = resolved.counts.trainingTasks,
+                attachments = resolved.counts.attachments,
+                rivalAnalyses = resolved.counts.rivalAnalyses,
+                rivalLinks = resolved.counts.rivalLinks,
+                opponentPlayers = resolved.counts.opponentPlayers,
+                boards = resolved.counts.boards,
                 mediaFiles = mediaMap.size
             )
         } finally {
@@ -194,6 +231,23 @@ class BackupRepository(
         }
         val fixtures = db.seasonFixtureDao().getAllOnce()
         val tasks = db.taskDao().getAllOnce()
+        val trainings = db.trainingDao().getAllOnce()
+        val trainingTasks = db.trainingTaskDao().getAllOnce()
+        val attachmentFiles = mutableMapOf<String, File>()
+        val attachments = db.attachmentDao().getAllOnce().map { att ->
+            if (att.deletedAt == null) {
+                val src = File(att.localPath)
+                if (src.isFile) {
+                    val relative = "attachments/${att.syncId}"
+                    attachmentFiles[relative] = src
+                    att.copy(localPath = relative)
+                } else att
+            } else att
+        }
+        val rivalAnalyses = db.rivalAnalysisDao().getAllOnce()
+        val rivalLinks = db.rivalLinkDao().getAllOnce()
+        val opponentPlayers = db.opponentPlayerDao().getAllOnce()
+        val boards = db.boardDao().getAllOnce()
         val homeLayout = homePrefs.currentEncodedLayout()
 
         val counts = JSONObject()
@@ -206,6 +260,13 @@ class BackupRepository(
             .put("opponentClubs", clubs.size)
             .put("fixtures", fixtures.size)
             .put("tasks", tasks.size)
+            .put("trainings", trainings.size)
+            .put("trainingTasks", trainingTasks.size)
+            .put("attachments", attachments.size)
+            .put("rivalAnalyses", rivalAnalyses.size)
+            .put("rivalLinks", rivalLinks.size)
+            .put("opponentPlayers", opponentPlayers.size)
+            .put("boards", boards.size)
 
         val root = JSONObject()
             .put("schemaVersion", SCHEMA_VERSION)
@@ -223,6 +284,13 @@ class BackupRepository(
             .put("opponentClubs", clubsToJson(clubs))
             .put("fixtures", fixturesToJson(fixtures))
             .put("tasks", tasksToJson(tasks))
+            .put("trainings", trainingsToJson(trainings))
+            .put("trainingTasks", trainingTasksToJson(trainingTasks))
+            .put("attachments", attachmentsToJson(attachments))
+            .put("rivalAnalyses", rivalAnalysesToJson(rivalAnalyses))
+            .put("rivalLinks", rivalLinksToJson(rivalLinks))
+            .put("opponentPlayers", opponentPlayersToJson(opponentPlayers))
+            .put("boards", boardsToJson(boards))
 
         val dbFile = context.getDatabasePath(AlhendinDatabase.NAME)
         val walFile = File(dbFile.path + "-wal")
@@ -254,6 +322,11 @@ class BackupRepository(
                 file.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
             }
+            attachmentFiles.forEach { (relative, file) ->
+                zip.putNextEntry(ZipEntry(relative))
+                file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
         }
 
         val mediaCount = mediaDir.listFiles()?.size ?: 0
@@ -269,7 +342,14 @@ class BackupRepository(
             opponentClubs = clubs.size,
             fixtures = fixtures.size,
             tasks = tasks.size,
-            mediaFiles = mediaCount
+            trainings = trainings.size,
+            trainingTasks = trainingTasks.size,
+            attachments = attachments.size,
+            rivalAnalyses = rivalAnalyses.size,
+            rivalLinks = rivalLinks.size,
+            opponentPlayers = opponentPlayers.size,
+            boards = boards.size,
+            mediaFiles = mediaCount + attachmentFiles.size
         )
     }
 
@@ -309,7 +389,14 @@ class BackupRepository(
             "custom_stat_type",
             "opponent_club",
             "season_fixture",
-            "task"
+            "task",
+            "training",
+            "training_task",
+            "attachment",
+            "rival_analysis",
+            "rival_link",
+            "opponent_player",
+            "board"
         )
 
         fun getInstance(context: Context): BackupRepository =
@@ -509,6 +596,140 @@ private fun tasksToJson(list: List<TaskEntity>) = JSONArray().also { arr ->
                 .putOptInt("durationMinutes", t.durationMinutes)
                 .put("description", t.description)
                 .put("boardSyncId", t.boardSyncId)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun trainingsToJson(list: List<TrainingEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("teamId", t.teamId)
+                .put("date", t.date)
+                .put("dateEpochDay", t.dateEpochDay)
+                .put("opponentClubId", t.opponentClubId)
+                .put("notes", t.notes)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun trainingTasksToJson(list: List<TrainingTaskEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("trainingId", t.trainingId)
+                .put("taskId", t.taskId)
+                .put("sortOrder", t.sortOrder)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun attachmentsToJson(list: List<AttachmentEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("parentType", t.parentType)
+                .put("parentSyncId", t.parentSyncId)
+                .put("mimeType", t.mimeType)
+                .put("name", t.name)
+                .put("localPath", t.localPath)
+                .put("remotePath", t.remotePath)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun rivalAnalysesToJson(list: List<RivalAnalysisEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("opponentClubId", t.opponentClubId)
+                .put("usualSystem", t.usualSystem)
+                .put("variants", t.variants)
+                .put("buildUp", t.buildUp)
+                .put("progression", t.progression)
+                .put("finalThird", t.finalThird)
+                .put("highPress", t.highPress)
+                .put("midBlock", t.midBlock)
+                .put("lowBlock", t.lowBlock)
+                .put("transAttackToDefense", t.transAttackToDefense)
+                .put("transDefenseToAttack", t.transDefenseToAttack)
+                .put("cornersOffensive", t.cornersOffensive)
+                .put("cornersDefensive", t.cornersDefensive)
+                .put("setPieces", t.setPieces)
+                .put("strengths", t.strengths)
+                .put("weaknesses", t.weaknesses)
+                .put("keyPlayers", t.keyPlayers)
+                .put("generalNotes", t.generalNotes)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun rivalLinksToJson(list: List<RivalLinkEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("opponentClubId", t.opponentClubId)
+                .put("type", t.type)
+                .put("label", t.label)
+                .put("url", t.url)
+                .put("sortOrder", t.sortOrder)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun opponentPlayersToJson(list: List<OpponentPlayerEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("opponentClubId", t.opponentClubId)
+                .put("name", t.name)
+                .put("createdAt", t.createdAt)
+                .put("updatedAt", t.updatedAt)
+                .putOptLong("deletedAt", t.deletedAt)
+        )
+    }
+}
+
+private fun boardsToJson(list: List<BoardEntity>) = JSONArray().also { arr ->
+    list.forEach { t ->
+        arr.put(
+            JSONObject()
+                .put("id", t.id)
+                .put("syncId", t.syncId)
+                .put("teamId", t.teamId)
+                .put("name", t.name)
+                .put("sceneVersion", t.sceneVersion)
+                .put("sceneJson", t.sceneJson)
                 .put("createdAt", t.createdAt)
                 .put("updatedAt", t.updatedAt)
                 .putOptLong("deletedAt", t.deletedAt)

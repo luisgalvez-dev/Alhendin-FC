@@ -21,6 +21,24 @@ class SeasonCalendarRepository(
     fun getClubs(teamId: Int): Flow<List<OpponentClub>> =
         clubDao.getByTeam(teamId).map { list -> list.map { it.toDomain() } }
 
+    fun searchClubs(teamId: Int, query: String): Flow<List<OpponentClub>> {
+        val needle = query.trim().lowercase()
+        return getClubs(teamId).map { list ->
+            if (needle.isEmpty()) list
+            else list.filter { club ->
+                club.name.lowercase().contains(needle) ||
+                    club.shortName.lowercase().contains(needle) ||
+                    club.stadium.lowercase().contains(needle)
+            }
+        }
+    }
+
+    fun getClub(id: Int): Flow<OpponentClub?> =
+        clubDao.observeById(id).map { it?.toDomain() }
+
+    suspend fun getClubOnce(id: Int): OpponentClub? =
+        clubDao.getById(id)?.toDomain()
+
     fun getFixtureRows(teamId: Int): Flow<List<FixtureRow>> =
         combine(
             fixtureDao.getByTeam(teamId),
@@ -84,7 +102,11 @@ class SeasonCalendarRepository(
         stadium = stadium,
         shieldUri = shieldUri,
         kitColors = kitColors,
-        sortOrder = sortOrder
+        sortOrder = sortOrder,
+        syncId = syncId,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        deletedAt = deletedAt
     )
 
     private fun OpponentClub.toEntity() = OpponentClubEntity(
@@ -95,7 +117,11 @@ class SeasonCalendarRepository(
         stadium = stadium,
         shieldUri = shieldUri,
         kitColors = kitColors,
-        sortOrder = sortOrder
+        sortOrder = sortOrder,
+        syncId = syncId,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        deletedAt = deletedAt
     )
 
     private fun SeasonFixtureEntity.toDomain() = SeasonFixture(

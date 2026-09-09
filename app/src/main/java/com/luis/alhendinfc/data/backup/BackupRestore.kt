@@ -56,6 +56,13 @@ internal class RoomBackupMutator(
         if (payload.opponentClubs.isNotEmpty()) db.opponentClubDao().insertAll(payload.opponentClubs)
         if (payload.fixtures.isNotEmpty()) db.seasonFixtureDao().insertAll(payload.fixtures)
         if (payload.tasks.isNotEmpty()) db.taskDao().insertAll(payload.tasks)
+        if (payload.trainings.isNotEmpty()) db.trainingDao().insertAll(payload.trainings)
+        if (payload.trainingTasks.isNotEmpty()) db.trainingTaskDao().insertAll(payload.trainingTasks)
+        if (payload.attachments.isNotEmpty()) db.attachmentDao().insertAll(payload.attachments)
+        if (payload.rivalAnalyses.isNotEmpty()) db.rivalAnalysisDao().insertAll(payload.rivalAnalyses)
+        if (payload.rivalLinks.isNotEmpty()) db.rivalLinkDao().insertAll(payload.rivalLinks)
+        if (payload.opponentPlayers.isNotEmpty()) db.opponentPlayerDao().insertAll(payload.opponentPlayers)
+        if (payload.boards.isNotEmpty()) db.boardDao().insertAll(payload.boards)
         fixSqliteSequences()
     }
 
@@ -68,7 +75,14 @@ internal class RoomBackupMutator(
         customStatTypes = db.customStatTypeDao().getAllOnce().size,
         opponentClubs = db.opponentClubDao().getAllOnce().size,
         fixtures = db.seasonFixtureDao().getAllOnce().size,
-        tasks = db.taskDao().getAllOnce().size
+        tasks = db.taskDao().getAllOnce().size,
+        trainings = db.trainingDao().getAllOnce().size,
+        trainingTasks = db.trainingTaskDao().getAllOnce().size,
+        attachments = db.attachmentDao().getAllOnce().size,
+        rivalAnalyses = db.rivalAnalysisDao().getAllOnce().size,
+        rivalLinks = db.rivalLinkDao().getAllOnce().size,
+        opponentPlayers = db.opponentPlayerDao().getAllOnce().size,
+        boards = db.boardDao().getAllOnce().size
     )
 
     private fun fixSqliteSequences() {

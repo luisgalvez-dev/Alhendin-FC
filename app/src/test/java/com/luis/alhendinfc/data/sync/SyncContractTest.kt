@@ -142,7 +142,8 @@ class SyncContractTest {
         assertNull(contract.remotePath)
         val hasRoomEntity = File("app/src/main/java/com/luis/alhendinfc/data/local/AttachmentEntity.kt").exists() ||
             File("src/main/java/com/luis/alhendinfc/data/local/AttachmentEntity.kt").exists()
-        assertFalse(hasRoomEntity)
+        assertTrue(hasRoomEntity)
+        assertTrue(AttachmentParentType.KNOWN.containsAll(listOf("TRAINING", "TASK", "MATCH", "OPPONENT", "BOARD")))
     }
 
     @Test

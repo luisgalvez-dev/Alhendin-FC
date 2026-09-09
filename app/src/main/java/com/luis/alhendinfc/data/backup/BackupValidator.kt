@@ -1,14 +1,21 @@
 package com.luis.alhendinfc.data.backup
 
+import com.luis.alhendinfc.data.local.AttachmentEntity
+import com.luis.alhendinfc.data.local.BoardEntity
 import com.luis.alhendinfc.data.local.CustomStatTypeEntity
 import com.luis.alhendinfc.data.local.MatchEntity
 import com.luis.alhendinfc.data.local.MatchEventEntity
 import com.luis.alhendinfc.data.local.MatchPlayerEntity
 import com.luis.alhendinfc.data.local.OpponentClubEntity
+import com.luis.alhendinfc.data.local.OpponentPlayerEntity
 import com.luis.alhendinfc.data.local.PlayerEntity
+import com.luis.alhendinfc.data.local.RivalAnalysisEntity
+import com.luis.alhendinfc.data.local.RivalLinkEntity
 import com.luis.alhendinfc.data.local.SeasonFixtureEntity
 import com.luis.alhendinfc.data.local.TaskEntity
 import com.luis.alhendinfc.data.local.TeamEntity
+import com.luis.alhendinfc.data.local.TrainingEntity
+import com.luis.alhendinfc.data.local.TrainingTaskEntity
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -22,7 +29,14 @@ data class BackupCounts(
     val customStatTypes: Int,
     val opponentClubs: Int,
     val fixtures: Int,
-    val tasks: Int = 0
+    val tasks: Int = 0,
+    val trainings: Int = 0,
+    val trainingTasks: Int = 0,
+    val attachments: Int = 0,
+    val rivalAnalyses: Int = 0,
+    val rivalLinks: Int = 0,
+    val opponentPlayers: Int = 0,
+    val boards: Int = 0
 )
 
 data class ValidatedBackup(
@@ -36,6 +50,13 @@ data class ValidatedBackup(
     val opponentClubs: List<OpponentClubEntity>,
     val fixtures: List<SeasonFixtureEntity>,
     val tasks: List<TaskEntity> = emptyList(),
+    val trainings: List<TrainingEntity> = emptyList(),
+    val trainingTasks: List<TrainingTaskEntity> = emptyList(),
+    val attachments: List<AttachmentEntity> = emptyList(),
+    val rivalAnalyses: List<RivalAnalysisEntity> = emptyList(),
+    val rivalLinks: List<RivalLinkEntity> = emptyList(),
+    val opponentPlayers: List<OpponentPlayerEntity> = emptyList(),
+    val boards: List<BoardEntity> = emptyList(),
     val homeLayout: String?,
     val counts: BackupCounts
 ) {
@@ -71,9 +92,9 @@ object BackupValidator {
             throw IllegalArgumentException("El backup no indica schemaVersion")
         }
         val schemaVersion = root.optInt("schemaVersion", -1)
-        if (schemaVersion !in 14..16) {
+        if (schemaVersion !in 14..20) {
             throw IllegalArgumentException(
-                "schemaVersion incompatible: $schemaVersion (se aceptan 14, 15 o 16)"
+                "schemaVersion incompatible: $schemaVersion (se aceptan 14, 15, 16, 17, 18, 19 o 20)"
             )
         }
 
@@ -89,14 +110,22 @@ object BackupValidator {
         }
 
         if (schemaVersion >= 16) {
-            if (!root.has("tasks") || root.isNull("tasks")) {
-                throw IllegalArgumentException("El backup no contiene el array obligatorio 'tasks'")
-            }
-            try {
-                root.getJSONArray("tasks")
-            } catch (e: JSONException) {
-                throw IllegalArgumentException("El campo 'tasks' no es un array JSON", e)
-            }
+            requireJsonArray(root, "tasks")
+        }
+        if (schemaVersion >= 17) {
+            requireJsonArray(root, "trainings")
+            requireJsonArray(root, "trainingTasks")
+            requireJsonArray(root, "attachments")
+        }
+        if (schemaVersion >= 18) {
+            requireJsonArray(root, "rivalAnalyses")
+            requireJsonArray(root, "rivalLinks")
+        }
+        if (schemaVersion >= 19) {
+            requireJsonArray(root, "opponentPlayers")
+        }
+        if (schemaVersion >= 20) {
+            requireJsonArray(root, "boards")
         }
 
         val requireSync = schemaVersion >= 15
@@ -113,6 +142,41 @@ object BackupValidator {
         } else {
             emptyList()
         }
+        val trainings = if (schemaVersion >= 17) {
+            parseTrainings(root.getJSONArray("trainings"), requireSync = true)
+        } else {
+            emptyList()
+        }
+        val trainingTasks = if (schemaVersion >= 17) {
+            parseTrainingTasks(root.getJSONArray("trainingTasks"), requireSync = true)
+        } else {
+            emptyList()
+        }
+        val attachments = if (schemaVersion >= 17) {
+            parseAttachments(root.getJSONArray("attachments"), requireSync = true)
+        } else {
+            emptyList()
+        }
+        val rivalAnalyses = if (schemaVersion >= 18) {
+            parseRivalAnalyses(root.getJSONArray("rivalAnalyses"), requireSync = true)
+        } else {
+            emptyList()
+        }
+        val rivalLinks = if (schemaVersion >= 18) {
+            parseRivalLinks(root.getJSONArray("rivalLinks"), requireSync = true)
+        } else {
+            emptyList()
+        }
+        val opponentPlayers = if (schemaVersion >= 19) {
+            parseOpponentPlayers(root.getJSONArray("opponentPlayers"), requireSync = true)
+        } else {
+            emptyList()
+        }
+        val boards = if (schemaVersion >= 20) {
+            parseBoards(root.getJSONArray("boards"), requireSync = true)
+        } else {
+            emptyList()
+        }
 
         if (requireSync) {
             assertUniqueSyncIds("teams", teams.map { it.syncId })
@@ -126,6 +190,21 @@ object BackupValidator {
             if (schemaVersion >= 16) {
                 assertUniqueSyncIds("tasks", tasks.map { it.syncId })
             }
+            if (schemaVersion >= 17) {
+                assertUniqueSyncIds("trainings", trainings.map { it.syncId })
+                assertUniqueSyncIds("trainingTasks", trainingTasks.map { it.syncId })
+                assertUniqueSyncIds("attachments", attachments.map { it.syncId })
+            }
+            if (schemaVersion >= 18) {
+                assertUniqueSyncIds("rivalAnalyses", rivalAnalyses.map { it.syncId })
+                assertUniqueSyncIds("rivalLinks", rivalLinks.map { it.syncId })
+            }
+            if (schemaVersion >= 19) {
+                assertUniqueSyncIds("opponentPlayers", opponentPlayers.map { it.syncId })
+            }
+            if (schemaVersion >= 20) {
+                assertUniqueSyncIds("boards", boards.map { it.syncId })
+            }
         }
 
         val parsed = BackupCounts(
@@ -137,7 +216,14 @@ object BackupValidator {
             customStatTypes = customStats.size,
             opponentClubs = clubs.size,
             fixtures = fixtures.size,
-            tasks = tasks.size
+            tasks = tasks.size,
+            trainings = trainings.size,
+            trainingTasks = trainingTasks.size,
+            attachments = attachments.size,
+            rivalAnalyses = rivalAnalyses.size,
+            rivalLinks = rivalLinks.size,
+            opponentPlayers = opponentPlayers.size,
+            boards = boards.size
         )
 
         if (root.has("counts") && !root.isNull("counts")) {
@@ -166,12 +252,23 @@ object BackupValidator {
             opponentClubs = clubs,
             fixtures = fixtures,
             tasks = tasks,
+            trainings = trainings,
+            trainingTasks = trainingTasks,
+            attachments = attachments,
+            rivalAnalyses = rivalAnalyses,
+            rivalLinks = rivalLinks,
+            opponentPlayers = opponentPlayers,
+            boards = boards,
             homeLayout = homeLayout,
             counts = parsed
         )
         return when (schemaVersion) {
-            14 -> BackupUpgrade.toV16(BackupUpgrade.toV15(payload))
-            15 -> BackupUpgrade.toV16(payload)
+            14 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(BackupUpgrade.toV16(BackupUpgrade.toV15(payload))))))
+            15 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(BackupUpgrade.toV16(payload)))))
+            16 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(payload))))
+            17 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(payload)))
+            18 -> BackupUpgrade.toV20(BackupUpgrade.toV19(payload))
+            19 -> BackupUpgrade.toV20(payload)
             else -> payload
         }
     }
@@ -185,8 +282,26 @@ object BackupValidator {
         customStatTypes = o.optInt("customStatTypes"),
         opponentClubs = o.optInt("opponentClubs"),
         fixtures = o.optInt("fixtures"),
-        tasks = o.optInt("tasks")
+        tasks = o.optInt("tasks"),
+        trainings = o.optInt("trainings"),
+        trainingTasks = o.optInt("trainingTasks"),
+        attachments = o.optInt("attachments"),
+        rivalAnalyses = o.optInt("rivalAnalyses"),
+        rivalLinks = o.optInt("rivalLinks"),
+        opponentPlayers = o.optInt("opponentPlayers"),
+        boards = o.optInt("boards")
     )
+}
+
+internal fun requireJsonArray(root: JSONObject, key: String) {
+    if (!root.has(key) || root.isNull(key)) {
+        throw IllegalArgumentException("El backup no contiene el array obligatorio '$key'")
+    }
+    try {
+        root.getJSONArray(key)
+    } catch (e: JSONException) {
+        throw IllegalArgumentException("El campo '$key' no es un array JSON", e)
+    }
 }
 
 internal fun assertUniqueSyncIds(label: String, ids: List<String>) {
@@ -430,6 +545,154 @@ private fun parseTasks(arr: JSONArray, requireSync: Boolean) = buildList {
                 durationMinutes = o.optNullableInt("durationMinutes"),
                 description = o.optString("description"),
                 boardSyncId = o.optNullableString("boardSyncId"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
+            )
+        )
+    }
+}
+
+private fun parseTrainings(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            TrainingEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                teamId = o.getInt("teamId"),
+                date = o.optString("date"),
+                dateEpochDay = o.optLong("dateEpochDay"),
+                opponentClubId = o.optNullableInt("opponentClubId"),
+                notes = o.optString("notes"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
+            )
+        )
+    }
+}
+
+private fun parseTrainingTasks(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            TrainingTaskEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                trainingId = o.getInt("trainingId"),
+                taskId = o.getInt("taskId"),
+                sortOrder = o.optInt("sortOrder"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
+            )
+        )
+    }
+}
+
+private fun parseAttachments(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            AttachmentEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                parentType = o.optString("parentType"),
+                parentSyncId = o.optString("parentSyncId"),
+                mimeType = o.optString("mimeType"),
+                name = o.optString("name"),
+                localPath = o.optString("localPath"),
+                remotePath = o.optNullableString("remotePath"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
+            )
+        )
+    }
+}
+
+private fun parseRivalAnalyses(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            RivalAnalysisEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                opponentClubId = o.getInt("opponentClubId"),
+                usualSystem = o.optString("usualSystem"),
+                variants = o.optString("variants"),
+                buildUp = o.optString("buildUp"),
+                progression = o.optString("progression"),
+                finalThird = o.optString("finalThird"),
+                highPress = o.optString("highPress"),
+                midBlock = o.optString("midBlock"),
+                lowBlock = o.optString("lowBlock"),
+                transAttackToDefense = o.optString("transAttackToDefense"),
+                transDefenseToAttack = o.optString("transDefenseToAttack"),
+                cornersOffensive = o.optString("cornersOffensive"),
+                cornersDefensive = o.optString("cornersDefensive"),
+                setPieces = o.optString("setPieces"),
+                strengths = o.optString("strengths"),
+                weaknesses = o.optString("weaknesses"),
+                keyPlayers = o.optString("keyPlayers"),
+                generalNotes = o.optString("generalNotes"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
+            )
+        )
+    }
+}
+
+private fun parseRivalLinks(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            RivalLinkEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                opponentClubId = o.getInt("opponentClubId"),
+                type = o.optString("type"),
+                label = o.optString("label"),
+                url = o.optString("url"),
+                sortOrder = o.optInt("sortOrder"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
+            )
+        )
+    }
+}
+
+private fun parseOpponentPlayers(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            OpponentPlayerEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                opponentClubId = o.getInt("opponentClubId"),
+                name = o.optString("name"),
+                createdAt = o.optLong("createdAt", 0L),
+                updatedAt = o.optLong("updatedAt", 0L),
+                deletedAt = o.optNullableLong("deletedAt")
+            )
+        )
+    }
+}
+
+private fun parseBoards(arr: JSONArray, requireSync: Boolean) = buildList {
+    for (i in 0 until arr.length()) {
+        val o = arr.getJSONObject(i)
+        add(
+            BoardEntity(
+                id = o.getInt("id"),
+                syncId = o.readSyncId(requireSync),
+                teamId = o.getInt("teamId"),
+                name = o.optString("name"),
+                sceneVersion = o.optInt("sceneVersion", 1),
+                sceneJson = o.optString("sceneJson"),
                 createdAt = o.optLong("createdAt", 0L),
                 updatedAt = o.optLong("updatedAt", 0L),
                 deletedAt = o.optNullableLong("deletedAt")

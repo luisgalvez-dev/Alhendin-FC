@@ -104,4 +104,51 @@ object BackupUpgrade {
             counts = payload.counts.copy(tasks = 0)
         )
     }
+
+    fun toV17(payload: ValidatedBackup): ValidatedBackup {
+        require(payload.schemaVersion == 16) {
+            "BackupUpgrade.toV17 solo acepta schema 16 (recibido ${payload.schemaVersion})"
+        }
+        return payload.copy(
+            schemaVersion = 17,
+            trainings = emptyList(),
+            trainingTasks = emptyList(),
+            attachments = emptyList(),
+            counts = payload.counts.copy(trainings = 0, trainingTasks = 0, attachments = 0)
+        )
+    }
+
+    fun toV18(payload: ValidatedBackup): ValidatedBackup {
+        require(payload.schemaVersion == 17) {
+            "BackupUpgrade.toV18 solo acepta schema 17 (recibido ${payload.schemaVersion})"
+        }
+        return payload.copy(
+            schemaVersion = 18,
+            rivalAnalyses = emptyList(),
+            rivalLinks = emptyList(),
+            counts = payload.counts.copy(rivalAnalyses = 0, rivalLinks = 0)
+        )
+    }
+
+    fun toV19(payload: ValidatedBackup): ValidatedBackup {
+        require(payload.schemaVersion == 18) {
+            "BackupUpgrade.toV19 solo acepta schema 18 (recibido ${payload.schemaVersion})"
+        }
+        return payload.copy(
+            schemaVersion = 19,
+            opponentPlayers = emptyList(),
+            counts = payload.counts.copy(opponentPlayers = 0)
+        )
+    }
+
+    fun toV20(payload: ValidatedBackup): ValidatedBackup {
+        require(payload.schemaVersion == 19) {
+            "BackupUpgrade.toV20 solo acepta schema 19 (recibido ${payload.schemaVersion})"
+        }
+        return payload.copy(
+            schemaVersion = 20,
+            boards = emptyList(),
+            counts = payload.counts.copy(boards = 0)
+        )
+    }
 }

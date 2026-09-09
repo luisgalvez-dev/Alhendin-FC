@@ -7,7 +7,9 @@ interface TaskRepository {
     fun getByTeam(teamId: Int): Flow<List<Task>>
     fun searchByName(teamId: Int, query: String): Flow<List<Task>>
     fun getById(id: Int): Flow<Task?>
+    suspend fun getOnce(id: Int): Task?
     suspend fun add(task: Task): Int
     suspend fun update(task: Task)
+    suspend fun setBoardSyncId(taskId: Int, boardSyncId: String?)
     suspend fun delete(task: Task)
 }

@@ -9,7 +9,11 @@ data class OpponentClub(
     val shieldUri: String? = null,
     /** Texto libre: color(es) de la equipación. */
     val kitColors: String = "",
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    val syncId: String = "",
+    val createdAt: Long = 0L,
+    val updatedAt: Long = 0L,
+    val deletedAt: Long? = null
 ) {
     val displayShort: String get() = shortName.ifBlank { name.take(12) }
 }

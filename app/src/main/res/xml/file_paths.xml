@@ -2,4 +2,5 @@
 <paths>
     <cache-path name="pdf_exports" path="." />
     <files-path name="backup_media" path="backup_media/" />
+    <files-path name="attachments" path="attachments/" />
 </paths>

@@ -18,6 +18,12 @@ interface OpponentClubDao {
     @Query("SELECT * FROM opponent_club WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getById(id: Int): OpponentClubEntity?
 
+    @Query("SELECT * FROM opponent_club WHERE id = :id AND deletedAt IS NULL LIMIT 1")
+    fun observeById(id: Int): Flow<OpponentClubEntity?>
+
+    @Query("SELECT * FROM opponent_club WHERE id = :id LIMIT 1")
+    suspend fun getByIdIncludingDeleted(id: Int): OpponentClubEntity?
+
     @Query(
         "SELECT * FROM opponent_club WHERE teamId = :teamId AND name = :name LIMIT 1"
     )
@@ -68,6 +74,14 @@ interface SeasonFixtureDao {
 
     @Query("SELECT COUNT(*) FROM season_fixture WHERE teamId = :teamId AND deletedAt IS NULL")
     suspend fun countByTeam(teamId: Int): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM season_fixture
+        WHERE teamId = :teamId AND deletedAt IS NULL AND dateEpochDay = :epochDay
+        """
+    )
+    suspend fun countActiveByTeamAndDay(teamId: Int, epochDay: Long): Int
 
     /** Incluye tombstones. Uso interno / backup / futura sync. */
     @Query("SELECT * FROM season_fixture ORDER BY id ASC")

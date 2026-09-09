@@ -97,6 +97,20 @@ class TaskRepositoryTest {
         repository.add(Task(teamId = 1, name = "A", playerCount = null, durationMinutes = null))
         assertEquals(1, repository.getByTeam(1).first().size)
     }
+
+    @Test
+    fun setBoardSyncId_assignsAndClearsWithoutChangingIdentity() = runTest {
+        val repository = repo()
+        val id = repository.add(Task(teamId = 1, name = "Pizarra asociada"))
+        val original = repository.getOnce(id)!!
+        repository.setBoardSyncId(id, "board-sync-1")
+        val linked = repository.getOnce(id)!!
+        assertEquals("board-sync-1", linked.boardSyncId)
+        assertEquals(original.syncId, linked.syncId)
+        assertEquals(original.createdAt, linked.createdAt)
+        repository.setBoardSyncId(id, null)
+        assertNull(repository.getOnce(id)!!.boardSyncId)
+    }
 }
 
 private class InMemoryTaskDao : TaskDao {
@@ -124,6 +138,17 @@ private class InMemoryTaskDao : TaskDao {
 
     override suspend fun getByIdOnce(id: Int): TaskEntity? =
         rows.firstOrNull { it.id == id && it.deletedAt == null }
+
+    override suspend fun getByIdIncludingDeleted(id: Int): TaskEntity? =
+        rows.firstOrNull { it.id == id }
+
+    override suspend fun getByIdsIncludingDeleted(ids: List<Int>): List<TaskEntity> =
+        if (ids.isEmpty()) emptyList() else rows.filter { it.id in ids }
+
+    override suspend fun getByBoardSyncIdIncludingDeleted(syncId: String): List<TaskEntity> =
+        rows.filter { it.boardSyncId == syncId }
+
+    override fun observeAllIncludingDeleted(): Flow<List<TaskEntity>> = state
 
     override suspend fun getAllOnce(): List<TaskEntity> = rows.sortedBy { it.id }
 

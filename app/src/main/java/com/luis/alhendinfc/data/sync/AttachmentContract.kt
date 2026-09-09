@@ -1,12 +1,18 @@
 package com.luis.alhendinfc.data.sync
 
+object AttachmentParentType {
+    const val TRAINING = "TRAINING"
+    const val TASK = "TASK"
+    const val MATCH = "MATCH"
+    const val OPPONENT = "OPPONENT"
+    const val BOARD = "BOARD"
+
+    val KNOWN = setOf(TRAINING, TASK, MATCH, OPPONENT, BOARD)
+}
+
 /**
- * Contrato conceptual para la futura tabla Attachment.
- * No hay entidad Room ni UI en esta fase.
- *
- * parentType ejemplos: "match", "training", "opponent_club", "board".
- * La consulta de un informe de partido desde el rival usa parentSyncId del Match
- * y el opponentClubId del partido: no se duplica el fichero.
+ * Contrato de Attachment. Room persiste [com.luis.alhendinfc.data.local.AttachmentEntity].
+ * parentType actuales: TRAINING, TASK. Preparado para MATCH, OPPONENT, BOARD.
  */
 data class AttachmentContract(
     val id: Int = 0,

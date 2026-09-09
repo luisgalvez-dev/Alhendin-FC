@@ -17,9 +17,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CustomStatTypeEntity::class,
         OpponentClubEntity::class,
         SeasonFixtureEntity::class,
-        TaskEntity::class
+        TaskEntity::class,
+        TrainingEntity::class,
+        TrainingTaskEntity::class,
+        AttachmentEntity::class,
+        RivalAnalysisEntity::class,
+        RivalLinkEntity::class,
+        OpponentPlayerEntity::class,
+        BoardEntity::class
     ],
-    version = 16,
+    version = 20,
     exportSchema = true
 )
 abstract class AlhendinDatabase : RoomDatabase() {
@@ -32,9 +39,16 @@ abstract class AlhendinDatabase : RoomDatabase() {
     abstract fun opponentClubDao(): OpponentClubDao
     abstract fun seasonFixtureDao(): SeasonFixtureDao
     abstract fun taskDao(): TaskDao
+    abstract fun trainingDao(): TrainingDao
+    abstract fun trainingTaskDao(): TrainingTaskDao
+    abstract fun attachmentDao(): AttachmentDao
+    abstract fun rivalAnalysisDao(): RivalAnalysisDao
+    abstract fun rivalLinkDao(): RivalLinkDao
+    abstract fun opponentPlayerDao(): OpponentPlayerDao
+    abstract fun boardDao(): BoardDao
 
     companion object {
-        const val VERSION = 16
+        const val VERSION = 20
         const val NAME = "alhendin_db"
 
         @Volatile
@@ -131,7 +145,11 @@ abstract class AlhendinDatabase : RoomDatabase() {
                         MIGRATION_12_13,
                         MIGRATION_13_14,
                         Migration14To15,
-                        Migration15To16
+                        Migration15To16,
+                        Migration16To17,
+                        Migration17To18,
+                        Migration18To19,
+                        Migration19To20
                     )
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                     .build()

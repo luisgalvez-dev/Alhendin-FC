@@ -10,25 +10,68 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV15_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(15))
-        assertEquals(16, payload.schemaVersion)
+        assertEquals(20, payload.schemaVersion)
         assertEquals(0, payload.counts.teams)
         assertEquals(0, payload.counts.tasks)
+        assertEquals(0, payload.counts.trainings)
+        assertEquals(0, payload.counts.rivalAnalyses)
         assertTrue(payload.tasks.isEmpty())
+        assertTrue(payload.trainings.isEmpty())
+        assertTrue(payload.rivalAnalyses.isEmpty())
     }
 
     @Test
     fun validEmptyBackupV14_isUpgraded() {
         val payload = BackupValidator.validateJson(validJson(14))
-        assertEquals(16, payload.schemaVersion)
+        assertEquals(20, payload.schemaVersion)
         assertEquals(0, payload.counts.players)
         assertTrue(payload.tasks.isEmpty())
+        assertTrue(payload.attachments.isEmpty())
+        assertTrue(payload.rivalAnalyses.isEmpty())
     }
 
     @Test
     fun validEmptyBackupV16_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(16))
-        assertEquals(16, payload.schemaVersion)
+        assertEquals(20, payload.schemaVersion)
         assertTrue(payload.tasks.isEmpty())
+        assertTrue(payload.trainings.isEmpty())
+    }
+
+    @Test
+    fun validEmptyBackupV17_isAccepted() {
+        val payload = BackupValidator.validateJson(validJson(17))
+        assertEquals(20, payload.schemaVersion)
+        assertTrue(payload.trainings.isEmpty())
+        assertTrue(payload.trainingTasks.isEmpty())
+        assertTrue(payload.attachments.isEmpty())
+        assertTrue(payload.rivalAnalyses.isEmpty())
+        assertTrue(payload.rivalLinks.isEmpty())
+    }
+
+    @Test
+    fun validEmptyBackupV18_isAccepted() {
+        val payload = BackupValidator.validateJson(validJson(18))
+        assertEquals(20, payload.schemaVersion)
+        assertTrue(payload.rivalAnalyses.isEmpty())
+        assertTrue(payload.rivalLinks.isEmpty())
+        assertTrue(payload.opponentPlayers.isEmpty())
+    }
+
+    @Test
+    fun validEmptyBackupV19_isAccepted() {
+        val payload = BackupValidator.validateJson(validJson(19))
+        assertEquals(20, payload.schemaVersion)
+        assertTrue(payload.opponentPlayers.isEmpty())
+        assertTrue(payload.boards.isEmpty())
+    }
+
+    @Test
+    fun validEmptyBackupV20_isAccepted() {
+        val payload = BackupValidator.validateJson(validJson(20))
+        assertEquals(20, payload.schemaVersion)
+        assertTrue(payload.boards.isEmpty())
+        assertEquals(0, payload.counts.boards)
     }
 
     @Test
@@ -79,10 +122,23 @@ class BackupValidatorTest {
 
     companion object {
         fun validJson(schemaVersion: Int): String {
-            val tasksLine = if (schemaVersion >= 16) {
-                ",\n              \"tasks\": []"
-            } else {
-                ""
+            val extra = buildString {
+                if (schemaVersion >= 16) append(",\n              \"tasks\": []")
+                if (schemaVersion >= 17) {
+                    append(",\n              \"trainings\": []")
+                    append(",\n              \"trainingTasks\": []")
+                    append(",\n              \"attachments\": []")
+                }
+                if (schemaVersion >= 18) {
+                    append(",\n              \"rivalAnalyses\": []")
+                    append(",\n              \"rivalLinks\": []")
+                }
+                if (schemaVersion >= 19) {
+                    append(",\n              \"opponentPlayers\": []")
+                }
+                if (schemaVersion >= 20) {
+                    append(",\n              \"boards\": []")
+                }
             }
             return """
             {
@@ -94,7 +150,7 @@ class BackupValidatorTest {
               "events": [],
               "customStatTypes": [],
               "opponentClubs": [],
-              "fixtures": []$tasksLine
+              "fixtures": []$extra
             }
             """.trimIndent()
         }

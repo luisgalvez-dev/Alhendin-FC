@@ -40,6 +40,14 @@ interface MatchDao {
     @Query("SELECT * FROM match_table ORDER BY id ASC")
     suspend fun getAllMatchesOnce(): List<MatchEntity>
 
+    @Query(
+        """
+        SELECT COUNT(*) FROM match_table
+        WHERE teamId = :teamId AND deletedAt IS NULL AND dateEpochDay = :epochDay
+        """
+    )
+    suspend fun countActiveByTeamAndDay(teamId: Int, epochDay: Long): Int
+
     /** Incluye tombstones. Uso interno / backup / futura sync. */
     @Query("SELECT * FROM match_player ORDER BY id ASC")
     suspend fun getAllMatchPlayersOnce(): List<MatchPlayerEntity>

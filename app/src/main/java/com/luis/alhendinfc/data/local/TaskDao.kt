@@ -35,6 +35,18 @@ interface TaskDao {
     @Query("SELECT * FROM task WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getByIdOnce(id: Int): TaskEntity?
 
+    @Query("SELECT * FROM task WHERE id = :id LIMIT 1")
+    suspend fun getByIdIncludingDeleted(id: Int): TaskEntity?
+
+    @Query("SELECT * FROM task WHERE id IN (:ids)")
+    suspend fun getByIdsIncludingDeleted(ids: List<Int>): List<TaskEntity>
+
+    @Query("SELECT * FROM task")
+    fun observeAllIncludingDeleted(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM task WHERE boardSyncId = :syncId")
+    suspend fun getByBoardSyncIdIncludingDeleted(syncId: String): List<TaskEntity>
+
     /** Incluye tombstones. Uso interno / backup / futura sync. */
     @Query("SELECT * FROM task ORDER BY id ASC")
     suspend fun getAllOnce(): List<TaskEntity>

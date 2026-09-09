@@ -24,4 +24,11 @@ object CalendarDate {
             null
         }
     }
+
+    fun format(epochDay: Long): String {
+        val date = LocalDate.ofEpochDay(epochDay)
+        return "%02d/%02d/%04d".format(date.dayOfMonth, date.monthValue, date.year)
+    }
+
+    fun epochDayOf(date: String): Long? = toEpochDay(date)
 }

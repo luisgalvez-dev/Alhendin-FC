@@ -9,13 +9,17 @@ import org.junit.Test
 class RoomSchemaPhase0Test {
 
     @Test
-    fun roomVersionIs16AndSchemaExportIsEnabled() {
-        assertEquals(16, AlhendinDatabase.VERSION)
+    fun roomVersionIs20AndSchemaExportIsEnabled() {
+        assertEquals(20, AlhendinDatabase.VERSION)
         val source = databaseSource()
-        assertTrue(source.contains("version = 16"))
+        assertTrue(source.contains("version = 20"))
         assertTrue(source.contains("exportSchema = true"))
         assertTrue(source.contains("Migration14To15"))
         assertTrue(source.contains("Migration15To16"))
+        assertTrue(source.contains("Migration16To17"))
+        assertTrue(source.contains("Migration17To18"))
+        assertTrue(source.contains("Migration18To19"))
+        assertTrue(source.contains("Migration19To20"))
     }
 
     @Test
@@ -36,6 +40,60 @@ class RoomSchemaPhase0Test {
         assertTrue(text.contains("syncId"))
         assertTrue(text.contains("dateEpochDay"))
         assertFalse(text.contains("index_team_deletedAt") || text.contains("index_player_deletedAt"))
+    }
+
+    @Test
+    fun schemaV20FileIsExportedWithBoard() {
+        val schema = schemaFile(20)
+        requireNotNull(schema) { "No se encontró el schema Room v20. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 20") || text.contains("\"version\":20"))
+        assertTrue(text.contains("\"tableName\": \"board\""))
+        assertTrue(text.contains("index_board_syncId"))
+        assertTrue(text.contains("index_board_teamId"))
+        assertTrue(text.contains("sceneJson"))
+        assertFalse(text.contains("index_board_deletedAt"))
+    }
+
+    @Test
+    fun schemaV19FileIsExportedWithOpponentPlayer() {
+        val schema = schemaFile(19)
+        requireNotNull(schema) { "No se encontró el schema Room v19. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 19") || text.contains("\"version\":19"))
+        assertTrue(text.contains("\"tableName\": \"opponent_player\""))
+        assertTrue(text.contains("index_opponent_player_syncId"))
+        assertFalse(text.contains("index_opponent_player_deletedAt"))
+    }
+
+    @Test
+    fun schemaV18FileIsExportedWithRivalDossier() {
+        val schema = schemaFile(18)
+        requireNotNull(schema) { "No se encontró el schema Room v18. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 18") || text.contains("\"version\":18"))
+        assertTrue(text.contains("\"tableName\": \"rival_analysis\""))
+        assertTrue(text.contains("\"tableName\": \"rival_link\""))
+        assertTrue(text.contains("\"tableName\": \"opponent_club\""))
+        assertTrue(text.contains("index_rival_analysis_syncId"))
+        assertTrue(text.contains("index_rival_link_syncId"))
+        assertFalse(text.contains("index_rival_analysis_deletedAt"))
+    }
+
+    @Test
+    fun schemaV17FileIsExportedWithTrainingAndAttachment() {
+        val schema = schemaFile(17)
+        requireNotNull(schema) { "No se encontró el schema Room v17. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 17") || text.contains("\"version\":17"))
+        assertTrue(text.contains("\"tableName\": \"training\""))
+        assertTrue(text.contains("\"tableName\": \"training_task\""))
+        assertTrue(text.contains("\"tableName\": \"attachment\""))
+        assertTrue(text.contains("\"tableName\": \"task\""))
+        assertTrue(text.contains("match_table"))
+        assertTrue(text.contains("index_training_syncId"))
+        assertTrue(text.contains("index_attachment_syncId"))
+        assertFalse(text.contains("index_training_deletedAt"))
     }
 
     @Test
@@ -63,7 +121,9 @@ class RoomSchemaPhase0Test {
     fun runtimeInsertsDoNotUseReplace() {
         val files = listOf(
             "MatchDao.kt", "PlayerDao.kt", "TeamDao.kt", "MatchEventDao.kt",
-            "CustomStatTypeDao.kt", "CalendarDao.kt", "TaskDao.kt"
+            "CustomStatTypeDao.kt", "CalendarDao.kt", "TaskDao.kt",
+            "TrainingDao.kt", "TrainingTaskDao.kt", "AttachmentDao.kt",
+            "RivalAnalysisDao.kt", "RivalLinkDao.kt", "OpponentPlayerDao.kt", "BoardDao.kt"
         ).map { name ->
             listOf(
                 File("src/main/java/com/luis/alhendinfc/data/local/$name"),
