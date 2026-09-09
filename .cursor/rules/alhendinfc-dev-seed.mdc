@@ -1,0 +1,21 @@
+---
+description: Seed DEV obligatorio al crear o ampliar módulos en AlhendinFC
+alwaysApply: true
+---
+
+# Seed DEV (AlhendinFC)
+
+Al implementar o ampliar un módulo en **AlhendinFC DEV**, añade ejemplos razonables al seed para probarlo enseguida.
+
+- Solo variante `dev`. Código real en `app/src/dev/java/.../dev/DevSeedData.kt`.
+- `app/src/stable/.../DevSeedData.kt` es un no-op. Nunca seed en stable ni en datos reales.
+- No `clearAllTables`, no borrar, no REPLACE, no pisar registros reales.
+- Prefijo `[DEV] ` (`DevSeedMarkers`) para identificar y poder borrar. Sin columna `isDemo`.
+- Si el demo ya existe (también tombstoneado), no recrearlo ni resincronizar su contenido.
+- Completar relaciones demo (tareas de sesión, análisis, enlaces) solo en el alta inicial. Una edición manual posterior no se pisa al reiniciar.
+- Insertar por **repositorios** (UUID, timestamps, `dateEpochDay`, tombstones, reglas de dominio).
+- Respetar ocupación de calendario: un día no puede ser partido y entrenamiento.
+- Rivales ficticios solo si ese equipo no tiene clubs activos.
+- Sin binarios automáticos salvo que la fase lo pida.
+
+Cada fase nueva amplía `DevSeedData` con 2–4 ejemplos del módulo.

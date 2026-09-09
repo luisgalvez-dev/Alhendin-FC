@@ -23,6 +23,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.compose.rememberNavController
 import com.luis.alhendinfc.data.local.AlhendinDatabase
+import com.luis.alhendinfc.dev.DevSeedData
 import com.luis.alhendinfc.navigation.AlhendinNavGraph
 import com.luis.alhendinfc.ui.theme.AlhendinFCTheme
 import java.util.concurrent.atomic.AtomicBoolean
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
                     // Precalienta Room en IO mientras se ve el splash; monta la UI al final.
                     withContext(Dispatchers.IO) {
                         AlhendinDatabase.getInstance(applicationContext)
+                        DevSeedData.runIfNeeded(applicationContext)
                     }
                     withFrameNanos { }
                     keepSystemSplash.set(false)
