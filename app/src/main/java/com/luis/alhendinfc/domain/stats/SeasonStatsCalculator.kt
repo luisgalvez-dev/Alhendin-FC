@@ -1,9 +1,12 @@
 package com.luis.alhendinfc.domain.stats
 
+import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.CustomStatAppliesTo
 import com.luis.alhendinfc.domain.model.CustomStatType
+import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
 import com.luis.alhendinfc.domain.model.MatchPlayer
+import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.PlayerCustomStatCount
 import com.luis.alhendinfc.domain.model.PlayerSeasonStats
@@ -66,7 +69,8 @@ object SeasonStatsCalculator {
         events: List<MatchEvent>,
         callups: List<MatchPlayer>,
         customTypes: List<CustomStatType>,
-        teamMatchIds: Set<Int>
+        teamMatchIds: Set<Int>,
+        finishedMatches: List<Match> = emptyList()
     ): PlayerSeasonStats {
         val playerEvents = eventsForTeamPlayer(events, player.id, teamMatchIds)
         val cards = cardTotals(playerEvents)
@@ -92,18 +96,44 @@ object SeasonStatsCalculator {
                 )
             }
 
+        val playerCallups = callups.filter { it.playerId == player.id && it.matchId in teamMatchIds }
+        val matchesPlayed = playerCallups.map { it.matchId }.distinct().size
+        val starts = playerCallups
+            .filter { it.callupStatus == CallupStatus.TITULAR }
+            .map { it.matchId }
+            .distinct()
+            .size
+        val callUps = playerCallups
+            .filter {
+                it.callupStatus == CallupStatus.TITULAR || it.callupStatus == CallupStatus.SUPLENTE
+            }
+            .map { it.matchId }
+            .distinct()
+            .size
+        val secondsPlayed = secondsPlayed(player.id, teamMatchIds, finishedMatches)
+
         return PlayerSeasonStats(
             player = player,
-            matchesPlayed = callups
-                .filter { it.playerId == player.id && it.matchId in teamMatchIds }
-                .map { it.matchId }
-                .distinct()
-                .size,
+            matchesPlayed = matchesPlayed,
             goals = playerEvents.filter { it.type == StatisticType.GOAL }.sumOf { it.value },
             assists = playerEvents.filter { it.type == StatisticType.ASSIST }.sumOf { it.value },
             yellowCards = cards.yellowCards,
             redCards = cards.redCards,
+            secondsPlayed = secondsPlayed,
+            minutesPlayed = minutesFromSeconds(secondsPlayed),
+            starts = starts,
+            callUps = callUps,
             customStats = customStats
         )
     }
+
+    fun secondsPlayed(
+        playerId: Int,
+        teamMatchIds: Set<Int>,
+        matches: List<Match>
+    ): Int = matches
+        .filter { it.id in teamMatchIds && it.status == MatchStatus.FINISHED }
+        .sumOf { match -> match.decodeFieldSeconds()[playerId] ?: 0 }
+
+    fun minutesFromSeconds(seconds: Int): Int = seconds.coerceAtLeast(0) / 60
 }

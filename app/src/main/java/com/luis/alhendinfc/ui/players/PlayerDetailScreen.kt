@@ -300,6 +300,13 @@ fun PlayerDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         PlayerStatChip("PJ", (stats?.matchesPlayed ?: 0).toString(), Color.White)
+                        PlayerStatChip("Min", (stats?.minutesPlayed ?: 0).toString(), Color.White)
+                        PlayerStatChip("Tit", (stats?.starts ?: 0).toString(), Color.White)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         PlayerStatChip("G", (stats?.goals ?: 0).toString(), GreenAccent)
                         PlayerStatChip("A", (stats?.assists ?: 0).toString(), GreenMint)
                         PlayerStatChip("TA", (stats?.yellowCards ?: 0).toString(), AmberAccent)
@@ -319,12 +326,13 @@ fun PlayerDetailScreen(
                     }
 
                     val hasAny = stats != null &&
-                        (stats.matchesPlayed > 0 || stats.goals > 0 || stats.assists > 0 ||
+                        (stats.matchesPlayed > 0 || stats.minutesPlayed > 0 || stats.starts > 0 ||
+                            stats.goals > 0 || stats.assists > 0 ||
                             stats.yellowCards > 0 || stats.redCards > 0 ||
                             stats.customStats.any { it.value > 0 })
                     Text(
                         text = if (hasAny) {
-                            "Acumulado de partidos finalizados. Las personalizadas vienen de Ajustes."
+                            "Acumulado de partidos finalizados (minutos reales en campo). Las personalizadas vienen de Ajustes."
                         } else {
                             "Sin datos aún. Registra eventos en vivo y finaliza el partido."
                         },

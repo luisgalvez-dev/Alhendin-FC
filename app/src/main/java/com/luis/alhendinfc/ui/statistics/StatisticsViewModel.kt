@@ -43,7 +43,10 @@ class StatisticsViewModel(
                 events = events,
                 callups = callups,
                 customTypes = customTypes,
-                teamMatchIds = teamMatchIds
+                teamMatchIds = teamMatchIds,
+                finishedMatches = matches.filter {
+                    it.teamId == teamId && it.status == MatchStatus.FINISHED
+                }
             )
         }.sortedWith(
             compareByDescending<PlayerSeasonStats> { it.goals }

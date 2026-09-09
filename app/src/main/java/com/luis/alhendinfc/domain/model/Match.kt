@@ -25,18 +25,7 @@ data class Match(
     val fieldSecondsJson: String = "",
     val fieldPositionsJson: String = ""
 ) {
-    fun decodeFieldSeconds(): Map<Int, Int> {
-        if (fieldSecondsJson.isBlank()) return emptyMap()
-        return fieldSecondsJson.split(',')
-            .mapNotNull { part ->
-                val bits = part.split(':')
-                if (bits.size != 2) return@mapNotNull null
-                val id = bits[0].toIntOrNull() ?: return@mapNotNull null
-                val secs = bits[1].toIntOrNull() ?: return@mapNotNull null
-                id to secs
-            }
-            .toMap()
-    }
+    fun decodeFieldSeconds(): Map<Int, Int> = parseFieldSeconds(fieldSecondsJson)
 
     /** playerId → (x, y) relativos 0..1 */
     fun decodeFieldPositions(): Map<Int, Pair<Float, Float>> {
@@ -54,6 +43,19 @@ data class Match(
     }
 
     companion object {
+        fun parseFieldSeconds(json: String): Map<Int, Int> {
+            if (json.isBlank()) return emptyMap()
+            return json.split(',')
+                .mapNotNull { part ->
+                    val bits = part.trim().split(':')
+                    if (bits.size != 2) return@mapNotNull null
+                    val id = bits[0].trim().toIntOrNull() ?: return@mapNotNull null
+                    val secs = bits[1].trim().toIntOrNull()?.coerceAtLeast(0) ?: return@mapNotNull null
+                    id to secs
+                }
+                .toMap()
+        }
+
         fun encodeFieldSeconds(map: Map<Int, Int>): String =
             map.entries.joinToString(",") { "${it.key}:${it.value}" }
 

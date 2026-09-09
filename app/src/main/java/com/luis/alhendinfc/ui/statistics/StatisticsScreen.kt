@@ -86,8 +86,8 @@ fun StatisticsScreen(
         ) {
             Text(
                 "Resumen de partidos finalizados ($finishedMatchCount). " +
-                    "Goles, asistencias y tarjetas aquí; las personalizadas (robos, paradas…) " +
-                    "se ven en la ficha de cada jugador.",
+                    "Minutos reales en campo, goles, asistencias y tarjetas aquí; " +
+                    "las personalizadas (robos, paradas…) se ven en la ficha de cada jugador.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
             )
@@ -98,7 +98,8 @@ fun StatisticsScreen(
 
             if (stats.all {
                     it.goals == 0 && it.assists == 0 && it.yellowCards == 0 && it.redCards == 0 &&
-                        it.matchesPlayed == 0 && it.customStats.all { c -> c.value == 0 }
+                        it.matchesPlayed == 0 && it.minutesPlayed == 0 && it.starts == 0 &&
+                        it.customStats.all { c -> c.value == 0 }
                 }) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -134,6 +135,8 @@ private fun StatsHeaderRow() {
         Spacer(Modifier.width(48.dp))
         Text("Jugador", Modifier.weight(1f), fontWeight = FontWeight.Bold, color = GreenMint)
         StatCol("PJ", GreenMint)
+        StatCol("Min", GreenMint)
+        StatCol("T", GreenMint)
         StatCol("G", GreenAccent)
         StatCol("A", GreenMint)
         StatCol("TA", AmberAccent)
@@ -172,6 +175,8 @@ private fun StatsPlayerRow(rank: Int, stats: PlayerSeasonStats) {
             )
         }
         StatCol(stats.matchesPlayed.toString(), Color.White)
+        StatCol(stats.minutesPlayed.toString(), Color.White)
+        StatCol(stats.starts.toString(), Color.White)
         StatCol(stats.goals.toString(), GreenAccent)
         StatCol(stats.assists.toString(), GreenMint)
         StatCol(stats.yellowCards.toString(), AmberAccent)
@@ -183,7 +188,7 @@ private fun StatsPlayerRow(rank: Int, stats: PlayerSeasonStats) {
 private fun StatCol(text: String, color: Color) {
     Text(
         text = text,
-        modifier = Modifier.width(44.dp),
+        modifier = Modifier.width(36.dp),
         textAlign = TextAlign.Center,
         fontWeight = FontWeight.Bold,
         fontSize = 15.sp,
