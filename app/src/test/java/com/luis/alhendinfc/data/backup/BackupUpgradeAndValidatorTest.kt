@@ -240,6 +240,22 @@ class BackupUpgradeAndValidatorTest {
         assertEquals("board-sync-task", payload.tasks[0].boardSyncId)
     }
 
+    @Test
+    fun v20_keepsMatchAttachmentsWithoutNewRoomVersion() {
+        val payload = BackupValidator.validateJson(v20Json())
+        assertEquals(20, payload.schemaVersion)
+        assertEquals(2, payload.attachments.size)
+        assertEquals("MATCH", payload.attachments[0].parentType)
+        assertEquals("match-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.attachments[0].parentSyncId)
+        assertEquals("Informe postpartido.pdf", payload.attachments[0].name)
+        assertEquals("application/pdf", payload.attachments[0].mimeType)
+        assertNull(payload.attachments[0].deletedAt)
+        assertEquals("MATCH", payload.attachments[1].parentType)
+        assertEquals("image/jpeg", payload.attachments[1].mimeType)
+        assertEquals(9_000L, payload.attachments[1].deletedAt)
+        assertEquals(2, payload.counts.attachments)
+    }
+
     private fun v14Json() = """
         {
           "schemaVersion": 14,
@@ -506,7 +522,34 @@ class BackupUpgradeAndValidatorTest {
           ],
           "trainings": [],
           "trainingTasks": [],
-          "attachments": [],
+          "attachments": [
+            {
+              "id": 80,
+              "syncId": "att-match-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "parentType": "MATCH",
+              "parentSyncId": "match-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "mimeType": "application/pdf",
+              "name": "Informe postpartido.pdf",
+              "localPath": "attachments/att-match-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "remotePath": null,
+              "createdAt": 100,
+              "updatedAt": 100,
+              "deletedAt": null
+            },
+            {
+              "id": 81,
+              "syncId": "att-match-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+              "parentType": "MATCH",
+              "parentSyncId": "match-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+              "mimeType": "image/jpeg",
+              "name": "old.jpg",
+              "localPath": "/old/foto.jpg",
+              "remotePath": null,
+              "createdAt": 50,
+              "updatedAt": 9000,
+              "deletedAt": 9000
+            }
+          ],
           "rivalAnalyses": [],
           "rivalLinks": [],
           "opponentPlayers": [],

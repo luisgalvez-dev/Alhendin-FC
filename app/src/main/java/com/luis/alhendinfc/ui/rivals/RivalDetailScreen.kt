@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luis.alhendinfc.domain.model.Attachment
+import com.luis.alhendinfc.domain.model.MatchReportRef
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.OpponentPlayer
 import com.luis.alhendinfc.domain.model.OpponentPlayerRules
@@ -77,6 +78,7 @@ fun RivalDetailScreen(
     playerQuery: String,
     links: List<RivalLink>,
     attachments: List<Attachment>,
+    matchReports: List<MatchReportRef>,
     onSaveClub: (OpponentClub) -> Unit,
     onSaveAnalysis: (RivalAnalysis) -> Unit,
     onPlayerQuery: (String) -> Unit,
@@ -169,6 +171,7 @@ fun RivalDetailScreen(
                 )
                 3 -> FilesTab(
                     attachments = attachments,
+                    matchReports = matchReports,
                     onAddFile = onAddFile,
                     onDelete = onDeleteAttachment,
                     onViewImage = { viewingPath = it }
@@ -405,10 +408,10 @@ private fun AnalysisTab(
         Section("Transiciones")
         Multi("Ataque → defensa", transAd) { transAd = it }
         Multi("Defensa → ataque", transDa) { transDa = it }
-        Section("ABP")
+        Section("A balón parado")
         Multi("Córners ofensivos", cornersOff) { cornersOff = it }
         Multi("Córners defensivos", cornersDef) { cornersDef = it }
-        Multi("Faltas / ABP adicionales", setPieces) { setPieces = it }
+        Multi("Faltas y otras acciones a balón parado", setPieces) { setPieces = it }
         Section("Evaluación")
         Multi("Fortalezas", strengths) { strengths = it }
         Multi("Debilidades", weaknesses) { weaknesses = it }
@@ -464,6 +467,7 @@ private fun Multi(label: String, value: String, onChange: (String) -> Unit) {
 @Composable
 private fun FilesTab(
     attachments: List<Attachment>,
+    matchReports: List<MatchReportRef>,
     onAddFile: (Uri, String, String) -> Unit,
     onDelete: (Attachment) -> Unit,
     onViewImage: (String) -> Unit
@@ -485,6 +489,7 @@ private fun FilesTab(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        Text("Archivos del rival", color = GreenMint, fontWeight = FontWeight.SemiBold)
         if (attachments.isEmpty()) {
             Text("Sin archivos. Puedes añadir imágenes, PDF u otros documentos.", color = AmberAccent)
         }
@@ -516,6 +521,33 @@ private fun FilesTab(
                 )
             }
         ) { Text("Añadir archivo") }
+
+        Spacer(Modifier.height(16.dp))
+        Text("Informes de partidos", color = GreenMint, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Archivos que hayas adjuntado en un partido contra este rival (el mismo documento, no una copia). El análisis táctico sigue en la pestaña Análisis.",
+            color = Color.White.copy(alpha = 0.7f),
+            style = MaterialTheme.typography.bodySmall
+        )
+        if (matchReports.isEmpty()) {
+            Text("Ningún partido contra este rival tiene archivos adjuntos.", color = AmberAccent)
+        }
+        matchReports.forEach { report ->
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text(report.matchHeading, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
+                TextButton(
+                    onClick = {
+                        if (report.attachment.isImage) onViewImage(report.attachment.localPath)
+                        else openAttachment(context, report.attachment)
+                    }
+                ) {
+                    Text(
+                        "${report.attachment.name.ifBlank { report.attachment.mimeType }} · ${report.attachment.typeLabel}",
+                        color = Color.White
+                    )
+                }
+            }
+        }
     }
 }
 

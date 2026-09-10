@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -380,6 +381,10 @@ class DevSeedDataTest {
         seedAll(h)
         val open = h.stores.matchDao.getAllMatchesOnce().first { it.status == "OPEN" && DevSeedMarkers.isDemo(it.notes) }
         val finished = h.stores.matchDao.getAllMatchesOnce().first { it.status == "FINISHED" && DevSeedMarkers.isDemo(it.notes) }
+        assertTrue(open.syncId.isNotBlank())
+        assertTrue(finished.syncId.isNotBlank())
+        assertNotNull(open.opponentClubId)
+        assertNotNull(finished.opponentClubId)
         val openCallup = h.stores.matchDao.getAllMatchPlayersOnce().filter { it.matchId == open.id && it.deletedAt == null }
         val finishedCallup = h.stores.matchDao.getAllMatchPlayersOnce().filter { it.matchId == finished.id && it.deletedAt == null }
         assertEquals(11, openCallup.count { it.callupStatus == CallupStatus.TITULAR.name })

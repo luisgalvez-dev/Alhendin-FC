@@ -2,6 +2,9 @@ package com.luis.alhendinfc.ui.matches
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -79,6 +82,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.FixtureRow
@@ -90,6 +94,13 @@ import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.live.MatchReportExporter
+import com.luis.alhendinfc.ui.theme.AmberAccent
+import com.luis.alhendinfc.ui.theme.GreenAccent
+import com.luis.alhendinfc.ui.theme.GreenLime
+import com.luis.alhendinfc.ui.theme.GreenMint
+import com.luis.alhendinfc.ui.theme.GreenPitch
+import com.luis.alhendinfc.ui.util.ImageViewer
+import com.luis.alhendinfc.ui.util.openAttachment
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
@@ -110,15 +121,29 @@ fun MatchSetupScreen(
     fixtures: List<FixtureRow> = emptyList(),
     matchEvents: List<MatchEvent> = emptyList(),
     eventLabel: (MatchEvent) -> String = { EventLabels.resolve(it) },
+    reports: List<Attachment> = emptyList(),
     onSave: (Match) -> Unit,
     onPlayerCallup: (playerId: Int, status: CallupStatus) -> Unit,
     onDelete: () -> Unit,
+    onAddReport: (Uri, String, String) -> Unit = { _, _, _ -> },
+    onDeleteReport: (Attachment) -> Unit = {},
     onContinue: (Match) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var viewingReport by remember { mutableStateOf<Attachment?>(null) }
+    val reportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: SecurityException) {
+        }
+        val mime = context.contentResolver.getType(uri) ?: "application/octet-stream"
+        val name = uri.lastPathSegment?.substringAfterLast('/') ?: "informe"
+        onAddReport(uri, name, mime)
+    }
 
     var rival by rememberSaveable(match.id) { mutableStateOf(match.rival) }
     var stadium by rememberSaveable(match.id) { mutableStateOf(match.stadium) }
@@ -247,6 +272,12 @@ fun MatchSetupScreen(
             title = { Text("Hora del partido") },
             text = { TimePicker(state = timePickerState) }
         )
+    }
+
+    viewingReport?.let { att ->
+        ImageViewer(source = att.localPath, title = att.name.ifBlank { "Informe" }) {
+            viewingReport = null
+        }
     }
 
     Scaffold(
@@ -641,6 +672,26 @@ fun MatchSetupScreen(
                     )
                 )
 
+                MatchReportsSection(
+                    reports = reports,
+                    canAdd = match.syncId.isNotBlank(),
+                    onAdd = {
+                        reportPicker.launch(
+                            arrayOf(
+                                "image/*",
+                                "application/pdf",
+                                "application/msword",
+                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                "text/plain"
+                            )
+                        )
+                    },
+                    onOpen = { att ->
+                        if (att.isImage) viewingReport = att else openAttachment(context, att)
+                    },
+                    onDelete = onDeleteReport
+                )
+
                 Spacer(Modifier.height(4.dp))
 
                 if (match.status != MatchStatus.FINISHED) {
@@ -665,7 +716,7 @@ fun MatchSetupScreen(
                             contentColor = Color(0xFF06210C)
                         )
                     ) {
-                        Text("CONTINUAR → PARTIDO EN VIVO", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("IR AL CAMPO", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 } else {
                     OutlinedButton(
@@ -961,4 +1012,56 @@ private suspend fun exportConvocatoriaAndActa(
     } catch (_: Exception) {
         snackbarHostState.showSnackbar("No se pudieron exportar los PDF")
     }
+}
+
+@Composable
+private fun MatchReportsSection(
+    reports: List<Attachment>,
+    canAdd: Boolean,
+    onAdd: () -> Unit,
+    onOpen: (Attachment) -> Unit,
+    onDelete: (Attachment) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+        Text("Informes", color = GreenMint, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Adjuntos de este partido: un PDF, una foto o un documento que te pasen (acta federativa, foto de pizarra, etc.). El análisis del rival se escribe en Rivales, no aquí.",
+            color = Color.White.copy(alpha = 0.7f),
+            style = MaterialTheme.typography.bodySmall
+        )
+        if (reports.isEmpty()) {
+            Text("Sin archivos. No es obligatorio: solo si tienes un documento de este partido.", color = AmberAccent)
+        }
+        reports.forEach { att ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = { onOpen(att) }, modifier = Modifier.weight(1f)) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(att.name.ifBlank { att.mimeType }, color = Color.White)
+                        val meta = listOfNotNull(
+                            att.typeLabel,
+                            formatReportDate(att.createdAt).takeIf { it.isNotBlank() }
+                        ).joinToString(" · ")
+                        if (meta.isNotBlank()) {
+                            Text(meta, color = Color.White.copy(alpha = 0.65f), style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+                IconButton(onClick = { onDelete(att) }) {
+                    Icon(Icons.Default.Delete, contentDescription = "Eliminar informe", tint = Color(0xFFFF8A80))
+                }
+            }
+        }
+        if (canAdd) {
+            TextButton(onClick = onAdd) { Text("Añadir informe") }
+        }
+    }
+}
+
+private fun formatReportDate(epochMs: Long): String {
+    if (epochMs <= 0L) return ""
+    val cal = Calendar.getInstance().apply { timeInMillis = epochMs }
+    val d = cal.get(Calendar.DAY_OF_MONTH).toString().padStart(2, '0')
+    val m = (cal.get(Calendar.MONTH) + 1).toString().padStart(2, '0')
+    val y = cal.get(Calendar.YEAR)
+    return "$d/$m/$y"
 }

@@ -274,7 +274,7 @@ object DevSeedData {
                     isHome = true,
                     opponentClubId = pastClub?.id,
                     status = MatchStatus.OPEN,
-                    notes = DevSeedMarkers.labeled("Partido pasado de prueba")
+                    notes = DevSeedMarkers.labeled("Partido pasado de prueba. Listo para añadir informes.")
                 )
             )
             seedDemoCallupIfEmpty(stores, teamId, id)
@@ -294,7 +294,7 @@ object DevSeedData {
                     isHome = false,
                     opponentClubId = futureClub?.id,
                     status = MatchStatus.OPEN,
-                    notes = DevSeedMarkers.labeled("Partido futuro de prueba")
+                    notes = DevSeedMarkers.labeled("Partido futuro de prueba. Listo para añadir informes.")
                 )
             )
             seedDemoCallupIfEmpty(stores, teamId, id)

@@ -9,12 +9,15 @@ import com.luis.alhendinfc.data.files.AndroidAttachmentStore
 import com.luis.alhendinfc.data.local.AlhendinDatabase
 import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.domain.model.Attachment
+import com.luis.alhendinfc.domain.model.MatchReportRef
+import com.luis.alhendinfc.domain.model.MatchReports
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.OpponentPlayer
 import com.luis.alhendinfc.domain.model.RivalAnalysis
 import com.luis.alhendinfc.domain.model.RivalLink
 import com.luis.alhendinfc.domain.repository.AttachmentRepository
 import com.luis.alhendinfc.domain.repository.AttachmentRepositoryImpl
+import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.RivalRepository
 import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
 import java.util.UUID
@@ -22,6 +25,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -32,6 +36,7 @@ class RivalDetailViewModel(
     private val calendarRepository: SeasonCalendarRepository,
     private val rivalRepository: RivalRepository,
     private val attachmentRepository: AttachmentRepository,
+    private val matchRepository: MatchRepositoryImpl,
     private val fileStore: AndroidAttachmentStore,
     private val clubId: Int
 ) : ViewModel() {
@@ -60,6 +65,17 @@ class RivalDetailViewModel(
             val syncId = current?.syncId.orEmpty()
             if (syncId.isBlank()) flowOf(emptyList())
             else attachmentRepository.getActiveByParent(AttachmentParentType.OPPONENT, syncId)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val matchReports: StateFlow<List<MatchReportRef>> =
+        club.flatMapLatest { current ->
+            if (current == null) flowOf(emptyList())
+            else combine(
+                matchRepository.getMatchesByTeam(current.teamId),
+                attachmentRepository.getActiveByType(AttachmentParentType.MATCH)
+            ) { matches, attachments ->
+                MatchReports.forOpponent(matches, attachments, current.id)
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun saveClub(club: OpponentClub) {
@@ -142,6 +158,7 @@ class RivalDetailViewModel(
                         SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                         RivalRepository(db.rivalAnalysisDao(), db.rivalLinkDao(), db.opponentPlayerDao()),
                         AttachmentRepositoryImpl(db.attachmentDao()),
+                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), db.attachmentDao()),
                         AndroidAttachmentStore(app),
                         clubId
                     ) as T

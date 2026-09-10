@@ -1,10 +1,14 @@
 package com.luis.alhendinfc.ui.matches
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.luis.alhendinfc.data.files.AndroidAttachmentStore
 import com.luis.alhendinfc.data.local.AlhendinDatabase
+import com.luis.alhendinfc.data.sync.AttachmentParentType
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.FixtureRow
@@ -13,10 +17,13 @@ import com.luis.alhendinfc.domain.model.MatchEvent
 import com.luis.alhendinfc.domain.model.MatchPlayer
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
+import com.luis.alhendinfc.domain.repository.AttachmentRepository
+import com.luis.alhendinfc.domain.repository.AttachmentRepositoryImpl
 import com.luis.alhendinfc.domain.repository.CustomStatTypeRepositoryImpl
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.PlayerRepositoryImpl
 import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
+import java.util.UUID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -33,6 +40,8 @@ class MatchViewModel(
     private val playerRepository: PlayerRepositoryImpl,
     private val calendarRepository: SeasonCalendarRepository,
     private val customStatTypeRepository: CustomStatTypeRepositoryImpl,
+    private val attachmentRepository: AttachmentRepository,
+    private val fileStore: AndroidAttachmentStore,
     private val teamId: Int
 ) : ViewModel() {
 
@@ -62,6 +71,14 @@ class MatchViewModel(
 
     val matchEvents: StateFlow<List<MatchEvent>> = _activeMatchId
         .flatMapLatest { id -> if (id != null) matchRepository.getMatchEvents(id) else flowOf(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val reports: StateFlow<List<Attachment>> = currentMatch
+        .flatMapLatest { match ->
+            val syncId = match?.syncId.orEmpty()
+            if (syncId.isBlank()) flowOf(emptyList())
+            else attachmentRepository.getActiveByParent(AttachmentParentType.MATCH, syncId)
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun eventLabel(event: MatchEvent): String =
@@ -97,6 +114,27 @@ class MatchViewModel(
         }
     }
 
+    fun addReport(uri: Uri, name: String, mime: String) {
+        viewModelScope.launch {
+            val syncId = currentMatch.value?.syncId.orEmpty()
+            if (syncId.isBlank()) return@launch
+            val attachmentSync = UUID.randomUUID().toString()
+            val path = fileStore.importUri(uri, name.ifBlank { "informe" }, attachmentSync)
+            attachmentRepository.add(
+                parentType = AttachmentParentType.MATCH,
+                parentSyncId = syncId,
+                mimeType = mime.ifBlank { "application/octet-stream" },
+                name = name.ifBlank { "informe" },
+                localPath = path,
+                syncId = attachmentSync
+            )
+        }
+    }
+
+    fun deleteReport(attachment: Attachment) {
+        viewModelScope.launch { attachmentRepository.delete(attachment) }
+    }
+
     fun setPlayerCallup(playerId: Int, status: CallupStatus) {
         val matchId = _activeMatchId.value ?: return
         viewModelScope.launch {
@@ -113,10 +151,12 @@ class MatchViewModel(
                 val db = AlhendinDatabase.getInstance(context.applicationContext)
                 @Suppress("UNCHECKED_CAST")
                 return MatchViewModel(
-                    MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
+                    MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), db.attachmentDao()),
                     PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
                     SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                     CustomStatTypeRepositoryImpl(db.customStatTypeDao()),
+                    AttachmentRepositoryImpl(db.attachmentDao()),
+                    AndroidAttachmentStore(context.applicationContext),
                     teamId
                 ) as T
             }

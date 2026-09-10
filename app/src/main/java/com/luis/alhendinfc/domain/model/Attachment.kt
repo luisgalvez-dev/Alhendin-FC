@@ -16,6 +16,13 @@ data class Attachment(
     val deletedAt: Long? = null
 ) {
     val isImage: Boolean get() = mimeType.startsWith("image/")
+    val isPdf: Boolean get() = mimeType.equals("application/pdf", ignoreCase = true)
+    val typeLabel: String
+        get() = when {
+            isImage -> "Imagen"
+            isPdf -> "PDF"
+            else -> "Documento"
+        }
 }
 
 object AttachmentRules {

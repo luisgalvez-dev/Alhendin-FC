@@ -12,7 +12,7 @@ object AttachmentParentType {
 
 /**
  * Contrato de Attachment. Room persiste [com.luis.alhendinfc.data.local.AttachmentEntity].
- * parentType actuales: TRAINING, TASK. Preparado para MATCH, OPPONENT, BOARD.
+ * parentType: TRAINING, TASK, MATCH, OPPONENT, BOARD.
  */
 data class AttachmentContract(
     val id: Int = 0,

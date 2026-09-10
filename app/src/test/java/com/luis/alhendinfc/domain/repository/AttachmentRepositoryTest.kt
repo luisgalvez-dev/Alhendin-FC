@@ -50,4 +50,24 @@ class AttachmentRepositoryTest {
         assertEquals(2, dao.getAllOnce().size)
         assertTrue(dao.getAllOnce().all { it.deletedAt != null })
     }
+
+    @Test
+    fun matchReports_severalTypesStayOnOneMatch_andIgnoreOtherParents() = runTest {
+        val dao = InMemoryAttachmentDao()
+        val repo = AttachmentRepositoryImpl(dao)
+        repo.add(AttachmentParentType.MATCH, "match-a", "application/pdf", "a.pdf", "/files/a.pdf")
+        repo.add(AttachmentParentType.MATCH, "match-a", "image/jpeg", "b.jpg", "/files/b.jpg")
+        repo.add(AttachmentParentType.MATCH, "match-b", "text/plain", "c.txt", "/files/c.txt")
+        repo.add(AttachmentParentType.OPPONENT, "club-a", "application/pdf", "rival.pdf", "/files/r.pdf")
+        val forA = repo.getActiveByParent(AttachmentParentType.MATCH, "match-a").first()
+        assertEquals(2, forA.size)
+        assertEquals(setOf("a.pdf", "b.jpg"), forA.map { it.name }.toSet())
+        val forB = repo.getActiveByParent(AttachmentParentType.MATCH, "match-b").first()
+        assertEquals(1, forB.size)
+        repo.delete(forA.first { it.name == "a.pdf" })
+        val after = repo.getActiveByParent(AttachmentParentType.MATCH, "match-a").first()
+        assertEquals(listOf("b.jpg"), after.map { it.name })
+        assertEquals(1, dao.getAllOnce().count { it.deletedAt != null })
+        assertEquals(1, repo.getActiveByType(AttachmentParentType.OPPONENT).first().size)
+    }
 }

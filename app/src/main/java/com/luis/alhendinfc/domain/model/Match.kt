@@ -23,7 +23,8 @@ data class Match(
     val liveClockRunning: Boolean = false,
     val liveClockAnchorWallMs: Long = 0L,
     val fieldSecondsJson: String = "",
-    val fieldPositionsJson: String = ""
+    val fieldPositionsJson: String = "",
+    val syncId: String = ""
 ) {
     fun decodeFieldSeconds(): Map<Int, Int> = parseFieldSeconds(fieldSecondsJson)
 
