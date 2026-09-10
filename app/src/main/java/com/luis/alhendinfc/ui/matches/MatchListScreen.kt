@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.luis.alhendinfc.domain.model.Match
+import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
@@ -227,17 +228,17 @@ private fun MatchCard(match: Match, onClick: () -> Unit) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = BorderStroke(
             1.dp,
-            when (match.status) {
-                MatchStatus.OPEN -> GreenAccent.copy(alpha = 0.45f)
-                MatchStatus.LIVE -> Color(0xFFFF7043).copy(alpha = 0.6f)
-                MatchStatus.FINISHED -> AmberAccent.copy(alpha = 0.35f)
+            when {
+                match.status == MatchStatus.FINISHED -> AmberAccent.copy(alpha = 0.35f)
+                MatchLifecycle.isShownAsLive(match) -> Color(0xFFFF7043).copy(alpha = 0.6f)
+                else -> GreenAccent.copy(alpha = 0.45f)
             }
         ),
         colors = CardDefaults.cardColors(
-            containerColor = when (match.status) {
-                MatchStatus.OPEN -> Color(0xFF143D22)
-                MatchStatus.LIVE -> Color(0xFF3D2414)
-                MatchStatus.FINISHED -> Color(0xFF1A2A20)
+            containerColor = when {
+                match.status == MatchStatus.FINISHED -> Color(0xFF1A2A20)
+                MatchLifecycle.isShownAsLive(match) -> Color(0xFF3D2414)
+                else -> Color(0xFF143D22)
             }
         )
     ) {
@@ -249,7 +250,7 @@ private fun MatchCard(match: Match, onClick: () -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    MatchStatusBadge(match.status)
+                    MatchStatusBadge(match)
                     Spacer(Modifier.width(10.dp))
                     Text(
                         text = "J${match.matchday}",
@@ -295,11 +296,12 @@ private fun MatchCard(match: Match, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MatchStatusBadge(status: MatchStatus) {
-    val (text, bg, fg) = when (status) {
-        MatchStatus.OPEN -> Triple("Abierto", GreenAccent, Color(0xFF06210C))
-        MatchStatus.LIVE -> Triple("En vivo", Color(0xFFFF7043), Color.White)
-        MatchStatus.FINISHED -> Triple("Finalizado", AmberAccent, Color(0xFF2A1A00))
+private fun MatchStatusBadge(match: Match) {
+    val live = MatchLifecycle.isShownAsLive(match)
+    val (text, bg, fg) = when {
+        match.status == MatchStatus.FINISHED -> Triple("Finalizado", AmberAccent, Color(0xFF2A1A00))
+        live -> Triple("En vivo", Color(0xFFFF7043), Color.White)
+        else -> Triple("Preparación", GreenAccent, Color(0xFF06210C))
     }
     Box(
         modifier = Modifier

@@ -19,6 +19,8 @@ interface MatchRepository {
     suspend fun updateMatch(match: Match)
     suspend fun deleteMatch(match: Match)
     suspend fun setPlayerCallup(matchId: Int, playerId: Int, status: CallupStatus)
+    /** Coloca titulares en el campo sin pasar a LIVE. */
+    suspend fun prepareLiveField(matchId: Int)
     suspend fun startLiveMatch(matchId: Int)
     suspend fun setPlayerOnField(matchId: Int, playerId: Int, onField: Boolean)
     suspend fun addEvent(event: MatchEvent): Int

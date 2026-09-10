@@ -119,7 +119,15 @@ class MatchLifecycleTest {
         )
         assertEquals(
             "Ir al partido",
-            MatchLifecycle.fixtureActionLabel(sampleMatch(status = MatchStatus.LIVE))
+            MatchLifecycle.fixtureActionLabel(
+                sampleMatch(status = MatchStatus.LIVE, liveElapsedSeconds = 12)
+            )
+        )
+        assertEquals(
+            "Continuar preparación",
+            MatchLifecycle.fixtureActionLabel(
+                sampleMatch(status = MatchStatus.LIVE, liveElapsedSeconds = 0)
+            )
         )
         assertEquals(
             "Ver partido",
@@ -178,6 +186,23 @@ class MatchLifecycleTest {
         val next = MatchLifecycle.applyFieldPositions(live, "8:0.1:0.9")
         assertEquals(3, next.homeScore)
         assertEquals(2, next.awayScore)
+    }
+
+    @Test
+    fun liveWithoutClock_isPreparationNotShownAsLive() {
+        val idle = sampleMatch(status = MatchStatus.LIVE, liveElapsedSeconds = 0)
+        assertFalse(MatchLifecycle.isShownAsLive(idle))
+        assertEquals("Preparación", MatchLifecycle.listBadgeLabel(idle))
+        val running = sampleMatch(
+            status = MatchStatus.LIVE,
+            liveElapsedSeconds = 0,
+            liveClockRunning = true
+        )
+        assertTrue(MatchLifecycle.isShownAsLive(running))
+        val played = sampleMatch(status = MatchStatus.LIVE, liveElapsedSeconds = 15)
+        assertTrue(MatchLifecycle.isShownAsLive(played))
+        assertEquals("En vivo", MatchLifecycle.listBadgeLabel(played))
+        assertEquals("Preparación", MatchLifecycle.listBadgeLabel(sampleMatch(status = MatchStatus.OPEN)))
     }
 
     @Test

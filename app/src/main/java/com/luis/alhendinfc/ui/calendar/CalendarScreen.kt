@@ -385,8 +385,8 @@ private fun FixturesTab(
             FixtureCard(
                 row = row,
                 existingLabel = when {
-                    openOrLive?.status == MatchStatus.LIVE -> "En vivo"
-                    openOrLive != null -> "Preparando"
+                    openOrLive != null && MatchLifecycle.isShownAsLive(openOrLive) -> "En vivo"
+                    openOrLive != null -> "Preparación"
                     related.any { it.status == MatchStatus.FINISHED } -> "Jugado"
                     else -> null
                 },

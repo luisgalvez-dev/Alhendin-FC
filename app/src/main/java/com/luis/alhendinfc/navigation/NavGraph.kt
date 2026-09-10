@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.luis.alhendinfc.domain.model.MatchStatus
+import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.StatisticType
 import com.luis.alhendinfc.ui.calendar.CalendarScreen
@@ -529,6 +530,7 @@ private fun MatchesRoute(
     val teamPlayers by matchViewModel.teamPlayers.collectAsStateWithLifecycle()
     val fixtures by matchViewModel.fixtures.collectAsStateWithLifecycle()
     val matchEvents by matchViewModel.matchEvents.collectAsStateWithLifecycle()
+    val reports by matchViewModel.reports.collectAsStateWithLifecycle()
 
     LaunchedEffect(openMatchId) {
         if (openMatchId > 0) {
@@ -546,9 +548,12 @@ private fun MatchesRoute(
                 fixtures = fixtures,
                 matchEvents = matchEvents,
                 eventLabel = matchViewModel::eventLabel,
+                reports = reports,
                 onSave = { matchViewModel.saveMatch(it) },
                 onPlayerCallup = { playerId, status -> matchViewModel.setPlayerCallup(playerId, status) },
                 onDelete = { matchViewModel.deleteCurrentMatch() },
+                onAddReport = matchViewModel::addReport,
+                onDeleteReport = matchViewModel::deleteReport,
                 onContinue = { saved ->
                     if (saved.status == MatchStatus.FINISHED) return@MatchSetupScreen
                     matchViewModel.saveMatch(saved)
@@ -564,12 +569,10 @@ private fun MatchesRoute(
                 onBack = onBack,
                 onCreateNew = { matchViewModel.createNewMatch { } },
                 onOpenMatch = { match ->
-                    if (match.status == MatchStatus.LIVE || match.status == MatchStatus.FINISHED) {
-                        if (match.status == MatchStatus.LIVE) {
-                            onContinueToLive(match.id)
-                        } else {
-                            matchViewModel.openMatch(match.id)
-                        }
+                    if (match.status == MatchStatus.FINISHED) {
+                        matchViewModel.openMatch(match.id)
+                    } else if (MatchLifecycle.isShownAsLive(match)) {
+                        onContinueToLive(match.id)
                     } else {
                         matchViewModel.openMatch(match.id)
                     }
@@ -658,6 +661,7 @@ private fun RivalDetailRoute(
     val playerQuery by vm.playerSearch.collectAsStateWithLifecycle()
     val links by vm.links.collectAsStateWithLifecycle()
     val attachments by vm.attachments.collectAsStateWithLifecycle()
+    val matchReports by vm.matchReports.collectAsStateWithLifecycle()
     RivalDetailScreen(
         club = club,
         analysis = analysis,
@@ -665,6 +669,7 @@ private fun RivalDetailRoute(
         playerQuery = playerQuery,
         links = links,
         attachments = attachments,
+        matchReports = matchReports,
         onSaveClub = vm::saveClub,
         onSaveAnalysis = vm::saveAnalysis,
         onPlayerQuery = vm::setPlayerQuery,

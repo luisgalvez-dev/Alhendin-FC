@@ -86,6 +86,7 @@ import com.luis.alhendinfc.domain.model.CustomStatType
 import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
+import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.StatisticType
@@ -400,6 +401,7 @@ fun LiveMatchScreen(
                 teamGoals = ui.teamGoals,
                 rivalGoals = ui.rivalGoals,
                 numParts = match.numParts,
+                preparing = !MatchLifecycle.isShownAsLive(match) && match.status != MatchStatus.FINISHED,
                 onBack = onBack,
                 onToggleTimer = onToggleTimer,
                 onNextPeriod = onNextPeriod,
@@ -522,6 +524,7 @@ private fun TopBar(
     teamGoals: Int,
     rivalGoals: Int,
     numParts: Int,
+    preparing: Boolean,
     onBack: () -> Unit,
     onToggleTimer: () -> Unit,
     onNextPeriod: () -> Unit,
@@ -557,7 +560,7 @@ private fun TopBar(
                 textAlign = TextAlign.Center
             )
             Text(
-                "Parte $period/$numParts",
+                if (preparing) "Preparación" else "Parte $period/$numParts",
                 style = MaterialTheme.typography.labelSmall,
                 color = AmberAccent,
                 textAlign = TextAlign.Center

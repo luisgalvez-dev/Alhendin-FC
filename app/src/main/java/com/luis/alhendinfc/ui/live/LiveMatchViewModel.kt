@@ -113,7 +113,7 @@ class LiveMatchViewModel(
             if (!started && m.status != MatchStatus.FINISHED) {
                 started = true
                 if (m.status == MatchStatus.OPEN) {
-                    matchRepository.startLiveMatch(matchId)
+                    matchRepository.prepareLiveField(matchId)
                     _ui.update { it.copy(teamGoals = 0, rivalGoals = 0, period = 1, ready = true) }
                     _clock.value = LiveClockState(elapsedSeconds = 0, isRunning = false)
                     _fieldSeconds.value = emptyMap()
@@ -343,48 +343,59 @@ class LiveMatchViewModel(
 
     fun startTimer() {
         if (finishing || _clock.value.isRunning) return
-        val elapsed = _clock.value.elapsedSeconds
-        clockAnchorWallMs = System.currentTimeMillis() - elapsed * 1000L
-        _clock.update { it.copy(isRunning = true) }
-        persistLiveClockAsync(running = true)
-        tickerJob?.cancel()
-        tickerJob = viewModelScope.launch {
-            var ticksSincePersist = 0
-            while (true) {
-                delay(1000)
-                val maxSeconds = (match.value?.durationPerPart ?: 45) * 60
-                val onFieldIds = matchPlayers.value.filter { it.isOnField }.map { it.playerId }.toSet()
-                val sentOffIds = sentOffPlayerIds()
-                val fromWall = if (clockAnchorWallMs > 0L) {
-                    ((System.currentTimeMillis() - clockAnchorWallMs) / 1000L).toInt()
-                } else {
-                    _clock.value.elapsedSeconds + 1
-                }
-                val next = fromWall.coerceAtMost(maxSeconds)
-                val gained = (next - _clock.value.elapsedSeconds).coerceAtLeast(0)
-                if (gained > 0) {
-                    val newTimes = _fieldSeconds.value.toMutableMap()
-                    onFieldIds.forEach { id ->
-                        if (id !in sentOffIds) {
-                            newTimes[id] = (newTimes[id] ?: 0) + gained
-                        }
+        viewModelScope.launch {
+            ensureLive()
+            if (finishing || _clock.value.isRunning) return@launch
+            val elapsed = _clock.value.elapsedSeconds
+            clockAnchorWallMs = System.currentTimeMillis() - elapsed * 1000L
+            _clock.update { it.copy(isRunning = true) }
+            persistLiveClockAsync(running = true)
+            tickerJob?.cancel()
+            tickerJob = viewModelScope.launch {
+                var ticksSincePersist = 0
+                while (true) {
+                    delay(1000)
+                    val maxSeconds = (match.value?.durationPerPart ?: 45) * 60
+                    val onFieldIds = matchPlayers.value.filter { it.isOnField }.map { it.playerId }.toSet()
+                    val sentOffIds = sentOffPlayerIds()
+                    val fromWall = if (clockAnchorWallMs > 0L) {
+                        ((System.currentTimeMillis() - clockAnchorWallMs) / 1000L).toInt()
+                    } else {
+                        _clock.value.elapsedSeconds + 1
                     }
-                    _fieldSeconds.value = newTimes
-                }
-                if (next >= maxSeconds) {
-                    _clock.value = LiveClockState(elapsedSeconds = maxSeconds, isRunning = false)
-                    clockAnchorWallMs = 0L
-                    persistLiveClock(running = false)
-                    break
-                } else {
-                    _clock.value = LiveClockState(elapsedSeconds = next, isRunning = true)
-                    ticksSincePersist++
-                    if (ticksSincePersist >= 10) {
-                        ticksSincePersist = 0
-                        persistLiveClock(running = true)
+                    val next = fromWall.coerceAtMost(maxSeconds)
+                    val gained = (next - _clock.value.elapsedSeconds).coerceAtLeast(0)
+                    if (gained > 0) {
+                        val newTimes = _fieldSeconds.value.toMutableMap()
+                        onFieldIds.forEach { id ->
+                            if (id !in sentOffIds) {
+                                newTimes[id] = (newTimes[id] ?: 0) + gained
+                            }
+                        }
+                        _fieldSeconds.value = newTimes
+                    }
+                    if (next >= maxSeconds) {
+                        _clock.value = LiveClockState(elapsedSeconds = maxSeconds, isRunning = false)
+                        clockAnchorWallMs = 0L
+                        persistLiveClock(running = false)
+                        break
+                    } else {
+                        _clock.value = LiveClockState(elapsedSeconds = next, isRunning = true)
+                        ticksSincePersist++
+                        if (ticksSincePersist >= 10) {
+                            ticksSincePersist = 0
+                            persistLiveClock(running = true)
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun ensureLive() {
+        if (finishing) return
+        if (match.value?.status == MatchStatus.OPEN) {
+            matchRepository.startLiveMatch(matchId)
         }
     }
 
@@ -494,6 +505,7 @@ class LiveMatchViewModel(
 
     fun addSimpleEvent(type: StatisticType, playerId: Int?) {
         viewModelScope.launch {
+            ensureLive()
             val prevYellows = if (playerId != null) {
                 events.value.count {
                     it.playerId == playerId && it.type == StatisticType.YELLOW_CARD
@@ -555,6 +567,7 @@ class LiveMatchViewModel(
 
     fun addSubstitution(playerOutId: Int, playerInId: Int) {
         viewModelScope.launch {
+            ensureLive()
             val outPos = _fieldPositions.value[playerOutId]
             matchRepository.setPlayerOnField(matchId, playerOutId, false)
             matchRepository.setPlayerOnField(matchId, playerInId, true)
@@ -589,6 +602,7 @@ class LiveMatchViewModel(
 
     fun addCustomEvent(typeCode: String, playerId: Int?) {
         viewModelScope.launch {
+            ensureLive()
             val label = customStatTypes.value.firstOrNull { it.code == typeCode }?.label
                 ?: typeCode
             matchRepository.addEvent(

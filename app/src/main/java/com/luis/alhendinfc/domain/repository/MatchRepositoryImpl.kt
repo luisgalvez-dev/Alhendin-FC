@@ -1,5 +1,6 @@
 package com.luis.alhendinfc.domain.repository
 
+import com.luis.alhendinfc.data.local.AttachmentDao
 import com.luis.alhendinfc.data.local.EntitySync
 import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.MatchDao
@@ -7,6 +8,7 @@ import com.luis.alhendinfc.data.local.MatchEntity
 import com.luis.alhendinfc.data.local.MatchEventDao
 import com.luis.alhendinfc.data.local.MatchEventEntity
 import com.luis.alhendinfc.data.local.MatchPlayerEntity
+import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
@@ -17,7 +19,8 @@ import kotlinx.coroutines.flow.map
 
 class MatchRepositoryImpl(
     private val dao: MatchDao,
-    private val eventDao: MatchEventDao
+    private val eventDao: MatchEventDao,
+    private val attachmentDao: AttachmentDao? = null
 ) : MatchRepository {
 
     override fun getMatchesByTeam(teamId: Int): Flow<List<Match>> =
@@ -53,6 +56,10 @@ class MatchRepositoryImpl(
         val now = EntitySync.now()
         eventDao.markDeletedByMatch(match.id, now)
         dao.markDeletedPlayersByMatch(match.id, now)
+        val syncId = match.syncId.ifBlank { dao.getByIdOnce(match.id)?.syncId.orEmpty() }
+        if (syncId.isNotBlank()) {
+            attachmentDao?.markDeletedByParent(AttachmentParentType.MATCH, syncId, now)
+        }
         dao.markDeleted(match.id, now)
     }
 
@@ -74,9 +81,13 @@ class MatchRepositoryImpl(
         }
     }
 
-    override suspend fun startLiveMatch(matchId: Int) {
+    override suspend fun prepareLiveField(matchId: Int) {
         dao.clearOnField(matchId)
         dao.putTitularesOnField(matchId)
+    }
+
+    override suspend fun startLiveMatch(matchId: Int) {
+        prepareLiveField(matchId)
         dao.markOpenToLive(matchId, EntitySync.now())
     }
 
@@ -177,7 +188,8 @@ class MatchRepositoryImpl(
         liveClockRunning = liveClockRunning,
         liveClockAnchorWallMs = liveClockAnchorWallMs,
         fieldSecondsJson = fieldSecondsJson,
-        fieldPositionsJson = fieldPositionsJson
+        fieldPositionsJson = fieldPositionsJson,
+        syncId = syncId
     )
 
     private fun Match.toEntity() = MatchEntity(
@@ -203,7 +215,8 @@ class MatchRepositoryImpl(
         liveClockRunning = liveClockRunning,
         liveClockAnchorWallMs = liveClockAnchorWallMs,
         fieldSecondsJson = fieldSecondsJson,
-        fieldPositionsJson = fieldPositionsJson
+        fieldPositionsJson = fieldPositionsJson,
+        syncId = syncId
     )
 
     private fun MatchPlayerEntity.toDomain() = MatchPlayer(

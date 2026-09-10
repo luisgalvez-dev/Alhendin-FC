@@ -99,10 +99,24 @@ object MatchLifecycle {
     }
 
     /** Texto del botón de jornada según el partido asociado (o su ausencia). */
-    fun fixtureActionLabel(match: Match?): String = when (match?.status) {
-        null -> "Preparar"
-        MatchStatus.OPEN -> "Continuar preparación"
-        MatchStatus.LIVE -> "Ir al partido"
-        MatchStatus.FINISHED -> "Ver partido"
+    fun fixtureActionLabel(match: Match?): String = when {
+        match == null -> "Preparar"
+        match.status == MatchStatus.FINISHED -> "Ver partido"
+        isShownAsLive(match) -> "Ir al partido"
+        else -> "Continuar preparación"
+    }
+
+    /**
+     * En vivo de verdad: el cronómetro ha arrancado o ya hay tiempo jugado.
+     * Entrar al campo o elegir convocatoria no cuenta.
+     */
+    fun isShownAsLive(match: Match): Boolean =
+        match.status == MatchStatus.LIVE &&
+            (match.liveClockRunning || match.liveElapsedSeconds > 0)
+
+    fun listBadgeLabel(match: Match): String = when {
+        match.status == MatchStatus.FINISHED -> "Finalizado"
+        isShownAsLive(match) -> "En vivo"
+        else -> "Preparación"
     }
 }

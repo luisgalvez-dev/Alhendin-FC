@@ -9,6 +9,7 @@ import com.luis.alhendinfc.data.preferences.HomePreferencesRepository
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.HomeLayoutConfig
 import com.luis.alhendinfc.domain.model.Match
+import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
@@ -50,7 +51,7 @@ class HomeViewModel(
         .flatMapLatest { teamId ->
             if (teamId == null) flowOf(null)
             else matchRepository.getMatchesByTeam(teamId).map { list ->
-                list.firstOrNull { it.status == MatchStatus.LIVE }
+                list.firstOrNull { MatchLifecycle.isShownAsLive(it) }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
