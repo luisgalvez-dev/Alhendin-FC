@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -54,10 +55,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.RfafStandings
+import com.luis.alhendinfc.domain.model.RivalFicha
 import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.theme.AmberAccent
@@ -223,7 +226,10 @@ fun RivalListScreen(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(clubs, key = { it.id }) { club ->
-                        val shieldPath = SharedMedia.displayPath(opponentShields[club.syncId], club.shieldUri)
+                        val shieldPath = SharedMedia.displayPath(
+                            club.syncId.takeIf { it.isNotBlank() }?.let { opponentShields[it] },
+                            club.shieldUri
+                        )
                         RivalRow(
                             club = club,
                             shieldPath = shieldPath,
@@ -261,18 +267,29 @@ private fun RivalRow(
         ) {
             RivalShieldThumb(
                 shieldUri = shieldPath,
-                fallback = club.displayShort.take(1).uppercase(),
+                fallback = RivalFicha.shieldInitials(club.name, club.shortName),
                 size = 48,
                 onClick = if (!shieldPath.isNullOrBlank()) onViewShield else null
             )
             Column(modifier = Modifier.weight(1f)) {
-                Text(club.name, fontWeight = FontWeight.Bold, color = Color.White)
-                val meta = listOfNotNull(
-                    club.shortName.takeIf { it.isNotBlank() },
-                    club.stadium.takeIf { it.isNotBlank() }
-                ).joinToString(" · ")
+                Text(
+                    club.name,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val stadium = RivalFicha.stadiumLine(club.stadium)
+                val kit = RivalFicha.kitLine(club.kitColors)
+                val meta = listOfNotNull(stadium, kit).joinToString(" · ")
                 if (meta.isNotBlank()) {
-                    Text(meta, style = MaterialTheme.typography.bodySmall, color = GreenMint)
+                    Text(
+                        meta,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = GreenMint,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
             IconButton(onClick = onDelete) {
@@ -297,8 +314,6 @@ internal fun RivalShieldThumb(
     Box(
         modifier = Modifier
             .size(size.dp)
-            .clip(CircleShape)
-            .background(GreenAccent.copy(alpha = 0.25f))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
     ) {
@@ -306,11 +321,25 @@ internal fun RivalShieldThumb(
             Image(
                 bitmap = bitmap!!,
                 contentDescription = "Escudo",
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
-            Text(fallback.ifBlank { "?" }, fontWeight = FontWeight.Bold, color = GreenMint)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(GreenAccent.copy(alpha = 0.22f))
+                    .border(1.dp, GreenAccent.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    fallback.ifBlank { "?" },
+                    fontWeight = FontWeight.Bold,
+                    color = GreenMint,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -356,7 +385,7 @@ internal fun RivalEditorDialog(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     RivalShieldThumb(
                         shieldUri = shieldUri,
-                        fallback = shortName.ifBlank { name }.take(1).uppercase(),
+                        fallback = RivalFicha.shieldInitials(name, shortName),
                         size = 64,
                         onClick = {
                             if (!shieldUri.isNullOrBlank()) viewing = true

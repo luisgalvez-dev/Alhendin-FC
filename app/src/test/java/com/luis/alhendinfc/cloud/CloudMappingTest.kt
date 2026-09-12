@@ -77,6 +77,7 @@ class CloudMappingTest {
         assertEquals("team-sync", liveDoc.data["teamSyncId"])
         assertEquals("club-sync", liveDoc.data["opponentClubSyncId"])
         assertFalse(liveDoc.data.containsKey("teamId"))
+        assertFalse(liveDoc.data.containsKey("opponentClubId"))
         assertFalse(liveDoc.data.containsKey("liveElapsedSeconds"))
         assertFalse(liveDoc.data.containsKey("fieldPositionsJson"))
         assertFalse(liveDoc.data.containsKey("fieldSecondsJson"))

@@ -407,6 +407,7 @@ private fun parseMatches(arr: JSONArray, requireSync: Boolean) = buildList {
                 homeScore = o.optNullableInt("homeScore"),
                 awayScore = o.optNullableInt("awayScore"),
                 opponentClubId = o.optNullableInt("opponentClubId"),
+                opponentClubSyncId = o.optNullableString("opponentClubSyncId"),
                 rivalShieldUri = o.optNullableString("rivalShieldUri"),
                 livePeriod = o.optInt("livePeriod", 1),
                 liveElapsedSeconds = o.optInt("liveElapsedSeconds", 0),

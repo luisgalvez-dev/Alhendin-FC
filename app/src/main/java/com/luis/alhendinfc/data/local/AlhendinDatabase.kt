@@ -31,7 +31,7 @@ import com.luis.alhendinfc.data.sync.TransferHooks
         SyncOutboxEntity::class,
         TransferJobEntity::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = true
 )
 abstract class AlhendinDatabase : RoomDatabase() {
@@ -55,7 +55,7 @@ abstract class AlhendinDatabase : RoomDatabase() {
     abstract fun transferJobDao(): TransferJobDao
 
     companion object {
-        const val VERSION = 22
+        const val VERSION = 23
         const val NAME = "alhendin_db"
 
         @Volatile
@@ -158,7 +158,8 @@ abstract class AlhendinDatabase : RoomDatabase() {
                         Migration18To19,
                         Migration19To20,
                         Migration20To21,
-                        Migration21To22
+                        Migration21To22,
+                        Migration22To23
                     )
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                     .build()

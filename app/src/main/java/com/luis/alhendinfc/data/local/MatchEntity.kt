@@ -30,6 +30,8 @@ data class MatchEntity(
     val homeScore: Int? = null,
     val awayScore: Int? = null,
     val opponentClubId: Int? = null,
+    /** Identidad portable del rival. No usar [opponentClubId] cross-device. */
+    val opponentClubSyncId: String? = null,
     val rivalShieldUri: String? = null,
     val livePeriod: Int = 1,
     val liveElapsedSeconds: Int = 0,

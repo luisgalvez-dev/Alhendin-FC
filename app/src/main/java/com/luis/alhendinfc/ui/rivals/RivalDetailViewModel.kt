@@ -84,9 +84,15 @@ class RivalDetailViewModel(
             if (current == null) flowOf(emptyList())
             else combine(
                 matchRepository.getMatchesByTeam(current.teamId),
-                attachmentRepository.getActiveByType(AttachmentParentType.MATCH)
-            ) { matches, attachments ->
-                MatchReports.forOpponent(matches, attachments, current.id)
+                attachmentRepository.getActiveByType(AttachmentParentType.MATCH),
+                calendarRepository.getClubs(current.teamId)
+            ) { matches, attachments, clubs ->
+                MatchReports.forOpponent(
+                    matches,
+                    attachments,
+                    current,
+                    clubs.associateBy { it.id }
+                )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -181,7 +187,7 @@ class RivalDetailViewModel(
                         SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                         RivalRepository(db.rivalAnalysisDao(), db.rivalLinkDao(), db.opponentPlayerDao()),
                         attachments,
-                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), db.attachmentDao()),
+                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), db.attachmentDao(), db.opponentClubDao()),
                         files,
                         SharedMediaWriter(attachments, files),
                         clubId

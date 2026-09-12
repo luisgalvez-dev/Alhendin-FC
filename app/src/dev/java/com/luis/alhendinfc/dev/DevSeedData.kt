@@ -74,7 +74,7 @@ object DevSeedData {
         val calendarRepo = SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao())
         val rivalRepo = RivalRepository(db.rivalAnalysisDao(), db.rivalLinkDao(), db.opponentPlayerDao())
         val boardRepo = BoardRepository(db.boardDao(), db.taskDao(), db.attachmentDao())
-        val matchRepo = MatchRepositoryImpl(db.matchDao(), db.matchEventDao())
+        val matchRepo = MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), null, db.opponentClubDao())
         val trainingRepo = TrainingRepositoryImpl(
             db.trainingDao(),
             db.trainingTaskDao(),

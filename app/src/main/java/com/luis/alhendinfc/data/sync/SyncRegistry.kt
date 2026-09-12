@@ -440,19 +440,13 @@ class SyncRegistry(private val db: AlhendinDatabase) {
         listLocal = {
             db.matchDao().getAllMatchesOnce().mapNotNull { row ->
                 val team = db.teamDao().getByIdIncludingDeleted(row.teamId) ?: return@mapNotNull null
-                val clubSync = row.opponentClubId?.let {
-                    db.opponentClubDao().getByIdIncludingDeleted(it)?.syncId
-                }
-                CloudMappers.match(row, team.syncId, clubSync)
+                CloudMappers.match(row, team.syncId, portableOpponentClubSyncId(row))
             }
         },
         readLocal = readLocal@{ id ->
             val row = db.matchDao().getBySyncIdIncludingDeleted(id) ?: return@readLocal null
             val team = db.teamDao().getByIdIncludingDeleted(row.teamId) ?: return@readLocal null
-            val clubSync = row.opponentClubId?.let {
-                db.opponentClubDao().getByIdIncludingDeleted(it)?.syncId
-            }
-            CloudMappers.match(row, team.syncId, clubSync)
+            CloudMappers.match(row, team.syncId, portableOpponentClubSyncId(row))
         },
         shouldPush = { doc -> LiveMatchGuard.shouldPushMatch(doc.str("status")) },
         applyRemote = applyRemote@{ doc ->
@@ -502,6 +496,7 @@ class SyncRegistry(private val db: AlhendinDatabase) {
                                 homeScore = doc.intOrNull("homeScore"),
                                 awayScore = doc.intOrNull("awayScore"),
                                 opponentClubId = club?.id,
+                                opponentClubSyncId = clubSync?.takeIf { it.isNotBlank() } ?: club?.syncId,
                                 rivalShieldUri = shield,
                                 fieldSecondsJson = fieldSeconds,
                                 fieldPositionsJson = "",
@@ -530,6 +525,7 @@ class SyncRegistry(private val db: AlhendinDatabase) {
                                 homeScore = doc.intOrNull("homeScore"),
                                 awayScore = doc.intOrNull("awayScore"),
                                 opponentClubId = club?.id,
+                                opponentClubSyncId = clubSync?.takeIf { it.isNotBlank() } ?: club?.syncId,
                                 rivalShieldUri = shield,
                                 fieldSecondsJson = fieldSeconds,
                                 updatedAt = doc.updatedAt,
@@ -1134,6 +1130,13 @@ class SyncRegistry(private val db: AlhendinDatabase) {
             }
         }
     )
+
+    private suspend fun portableOpponentClubSyncId(row: MatchEntity): String? {
+        val stored = row.opponentClubSyncId?.trim()?.takeIf { it.isNotEmpty() }
+        if (stored != null) return stored
+        val clubId = row.opponentClubId ?: return null
+        return db.opponentClubDao().getByIdIncludingDeleted(clubId)?.syncId?.trim()?.takeIf { it.isNotEmpty() }
+    }
 
     private fun lww(localUpdatedAt: Long, localDeletedAt: Long?, doc: CloudDoc): LwwDecision {
         if (localUpdatedAt == 0L && localDeletedAt == null) {

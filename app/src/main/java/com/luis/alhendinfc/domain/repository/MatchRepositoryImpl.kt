@@ -8,6 +8,7 @@ import com.luis.alhendinfc.data.local.MatchEntity
 import com.luis.alhendinfc.data.local.MatchEventDao
 import com.luis.alhendinfc.data.local.MatchEventEntity
 import com.luis.alhendinfc.data.local.MatchPlayerEntity
+import com.luis.alhendinfc.data.local.OpponentClubDao
 import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.data.sync.LiveMatchGuard
 import com.luis.alhendinfc.data.sync.SyncEntityType
@@ -24,7 +25,8 @@ import kotlinx.coroutines.flow.map
 class MatchRepositoryImpl(
     private val dao: MatchDao,
     private val eventDao: MatchEventDao,
-    private val attachmentDao: AttachmentDao? = null
+    private val attachmentDao: AttachmentDao? = null,
+    private val clubDao: OpponentClubDao? = null
 ) : MatchRepository {
 
     override fun getMatchesByTeam(teamId: Int): Flow<List<Match>> =
@@ -46,7 +48,7 @@ class MatchRepositoryImpl(
         dao.getFinishedCallupsByTeam(teamId).map { list -> list.map { it.toDomain() } }
 
     override suspend fun createMatch(match: Match): Int {
-        val stamped = EntityWrites.matchForInsert(match.toEntity(), EntitySync.now())
+        val stamped = EntityWrites.matchForInsert(stampOpponentSync(match.toEntity()), EntitySync.now())
         return SyncHooks.local(SyncEntityType.MATCH, stamped.syncId) {
             dao.insertMatch(stamped).toInt()
         }
@@ -57,12 +59,13 @@ class MatchRepositoryImpl(
 
     override suspend fun updateMatch(match: Match) {
         val existing = dao.getByIdOnce(match.id) ?: return
+        val incoming = stampOpponentSync(match.toEntity())
         if (LiveMatchGuard.isLocalLive(existing.status)) {
-            dao.updateMatch(EntityWrites.matchForUpdate(existing, match.toEntity(), EntitySync.now()))
+            dao.updateMatch(EntityWrites.matchForUpdate(existing, incoming, EntitySync.now()))
             return
         }
         SyncHooks.local(SyncEntityType.MATCH, existing.syncId) {
-            dao.updateMatch(EntityWrites.matchForUpdate(existing, match.toEntity(), EntitySync.now()))
+            dao.updateMatch(EntityWrites.matchForUpdate(existing, incoming, EntitySync.now()))
         }
     }
 
@@ -225,6 +228,14 @@ class MatchRepositoryImpl(
         dao.updateLiveScore(matchId, homeScore, awayScore)
     }
 
+    private suspend fun stampOpponentSync(entity: MatchEntity): MatchEntity {
+        val clubId = entity.opponentClubId?.takeIf { it > 0 }
+        if (clubId == null) return entity.copy(opponentClubSyncId = null)
+        val fromClub = clubDao?.getByIdIncludingDeleted(clubId)?.syncId?.trim()?.takeIf { it.isNotEmpty() }
+        if (fromClub != null) return entity.copy(opponentClubSyncId = fromClub)
+        return entity.copy(opponentClubSyncId = entity.opponentClubSyncId?.trim()?.takeIf { it.isNotEmpty() })
+    }
+
     private fun MatchEntity.toDomain() = Match(
         id = id,
         teamId = teamId,
@@ -246,6 +257,7 @@ class MatchRepositoryImpl(
         homeScore = homeScore,
         awayScore = awayScore,
         opponentClubId = opponentClubId,
+        opponentClubSyncId = opponentClubSyncId,
         rivalShieldUri = rivalShieldUri,
         livePeriod = livePeriod,
         liveElapsedSeconds = liveElapsedSeconds,
@@ -273,6 +285,7 @@ class MatchRepositoryImpl(
         homeScore = homeScore,
         awayScore = awayScore,
         opponentClubId = opponentClubId,
+        opponentClubSyncId = opponentClubSyncId,
         rivalShieldUri = rivalShieldUri,
         livePeriod = livePeriod,
         liveElapsedSeconds = liveElapsedSeconds,

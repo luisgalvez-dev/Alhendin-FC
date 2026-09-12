@@ -16,3 +16,7 @@ supabase.local.properties
 tools/node_modules/
 **/serviceAccount*.json
 tools/firebase-adminsdk*.json
+
+# JVM crash logs
+**/hs_err_pid*.log
+**/replay_pid*.log

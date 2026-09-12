@@ -770,7 +770,7 @@ class LiveMatchViewModel(
                     @Suppress("UNCHECKED_CAST")
                     val attachments = AttachmentRepositoryImpl(db.attachmentDao())
                     return LiveMatchViewModel(
-                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
+                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), null, db.opponentClubDao()),
                         PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
                         CustomStatTypeRepositoryImpl(db.customStatTypeDao()),
                         attachments,

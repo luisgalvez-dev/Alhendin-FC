@@ -9,10 +9,10 @@ import org.junit.Test
 class RoomSchemaPhase0Test {
 
     @Test
-    fun roomVersionIs22AndSchemaExportIsEnabled() {
-        assertEquals(22, AlhendinDatabase.VERSION)
+    fun roomVersionIs23AndSchemaExportIsEnabled() {
+        assertEquals(23, AlhendinDatabase.VERSION)
         val source = databaseSource()
-        assertTrue(source.contains("version = 22"))
+        assertTrue(source.contains("version = 23"))
         assertTrue(source.contains("exportSchema = true"))
         assertTrue(source.contains("Migration14To15"))
         assertTrue(source.contains("Migration15To16"))
@@ -22,6 +22,7 @@ class RoomSchemaPhase0Test {
         assertTrue(source.contains("Migration19To20"))
         assertTrue(source.contains("Migration20To21"))
         assertTrue(source.contains("Migration21To22"))
+        assertTrue(source.contains("Migration22To23"))
     }
 
     @Test
@@ -42,6 +43,16 @@ class RoomSchemaPhase0Test {
         assertTrue(text.contains("syncId"))
         assertTrue(text.contains("dateEpochDay"))
         assertFalse(text.contains("index_team_deletedAt") || text.contains("index_player_deletedAt"))
+    }
+
+    @Test
+    fun schemaV23FileIsExportedWithOpponentClubSyncId() {
+        val schema = schemaFile(23)
+        requireNotNull(schema) { "No se encontró el schema Room v23. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 23") || text.contains("\"version\":23"))
+        assertTrue(text.contains("opponentClubSyncId"))
+        assertTrue(text.contains("match_table"))
     }
 
     @Test
@@ -139,6 +150,21 @@ class RoomSchemaPhase0Test {
         val schema = schemaFile(14)
         requireNotNull(schema) { "Debe conservarse el schema Room v14 para migrar." }
         assertTrue(schema.readText().contains("match_table"))
+    }
+
+    @Test
+    fun migration22To23_addsPortableClubSyncWithoutDestructiveFallback() {
+        val file = listOf(
+            File("src/main/java/com/luis/alhendinfc/data/local/Migration22To23.kt"),
+            File("app/src/main/java/com/luis/alhendinfc/data/local/Migration22To23.kt")
+        ).first { it.exists() }
+        val text = file.readText()
+        assertTrue(text.contains("Migration(22, 23)"))
+        assertTrue(text.contains("ADD COLUMN `opponentClubSyncId`"))
+        assertTrue(text.contains("UPDATE `match_table`"))
+        assertTrue(text.contains("opponent_club"))
+        assertFalse(text.contains("fallbackToDestructiveMigration"))
+        assertFalse(text.contains("DROP TABLE `match_table`"))
     }
 
     @Test

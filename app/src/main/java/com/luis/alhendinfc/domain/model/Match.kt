@@ -17,6 +17,8 @@ data class Match(
     val homeScore: Int? = null,
     val awayScore: Int? = null,
     val opponentClubId: Int? = null,
+    /** Identidad portable del [OpponentClub]. Preferida frente a [opponentClubId]. */
+    val opponentClubSyncId: String? = null,
     val rivalShieldUri: String? = null,
     val livePeriod: Int = 1,
     val liveElapsedSeconds: Int = 0,

@@ -163,7 +163,7 @@ class MatchViewModel(
                 val db = AlhendinDatabase.getInstance(context.applicationContext)
                 @Suppress("UNCHECKED_CAST")
                 return MatchViewModel(
-                    MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), db.attachmentDao()),
+                    MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), db.attachmentDao(), db.opponentClubDao()),
                     PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
                     SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                     CustomStatTypeRepositoryImpl(db.customStatTypeDao()),

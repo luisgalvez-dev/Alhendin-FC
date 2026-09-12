@@ -207,7 +207,7 @@ class CalendarViewModel(
                     val attachments = AttachmentRepositoryImpl(db.attachmentDao())
                     return CalendarViewModel(
                         SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
-                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
+                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), null, db.opponentClubDao()),
                         attachments,
                         SharedMediaWriter(attachments, AndroidAttachmentStore(app)),
                         teamId

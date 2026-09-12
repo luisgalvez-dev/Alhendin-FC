@@ -139,7 +139,7 @@ class MonthCalendarViewModel(
                     val db = AlhendinDatabase.getInstance(context.applicationContext)
                     return MonthCalendarViewModel(
                         SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
-                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
+                        MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), null, db.opponentClubDao()),
                         TrainingRepositoryImpl(
                             db.trainingDao(),
                             db.trainingTaskDao(),

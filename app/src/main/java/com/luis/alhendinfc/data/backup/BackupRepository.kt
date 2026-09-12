@@ -470,6 +470,7 @@ private fun matchesToJson(list: List<MatchEntity>) = JSONArray().also { arr ->
                 .put("homeScore", m.homeScore)
                 .put("awayScore", m.awayScore)
                 .put("opponentClubId", m.opponentClubId)
+                .put("opponentClubSyncId", m.opponentClubSyncId)
                 .put("rivalShieldUri", m.rivalShieldUri)
                 .put("livePeriod", m.livePeriod)
                 .put("liveElapsedSeconds", m.liveElapsedSeconds)
