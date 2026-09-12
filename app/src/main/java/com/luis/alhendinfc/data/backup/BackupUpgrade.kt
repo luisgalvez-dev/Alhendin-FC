@@ -151,4 +151,11 @@ object BackupUpgrade {
             counts = payload.counts.copy(boards = 0)
         )
     }
+
+    fun toV21(payload: ValidatedBackup): ValidatedBackup {
+        require(payload.schemaVersion == 20) {
+            "BackupUpgrade.toV21 solo acepta schema 20 (recibido ${payload.schemaVersion})"
+        }
+        return payload.copy(schemaVersion = 21)
+    }
 }

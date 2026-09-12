@@ -198,6 +198,9 @@ internal class InMemoryOpponentClubDao : OpponentClubDao {
 
     override suspend fun getAllOnce(): List<OpponentClubEntity> = rows.value
 
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): OpponentClubEntity? =
+        rows.value.firstOrNull { it.syncId == syncId }
+
     override suspend fun insertAll(entities: List<OpponentClubEntity>) {
         entities.forEach { insert(it) }
     }
@@ -227,6 +230,7 @@ private class InMemoryEmptyFixtureDao : SeasonFixtureDao {
     override suspend fun countByTeam(teamId: Int) = 0
     override suspend fun countActiveByTeamAndDay(teamId: Int, epochDay: Long) = 0
     override suspend fun getAllOnce() = emptyList<SeasonFixtureEntity>()
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String) = null
     override suspend fun insertAll(entities: List<SeasonFixtureEntity>) = Unit
     override suspend fun insert(entity: SeasonFixtureEntity) = 1L
     override suspend fun update(entity: SeasonFixtureEntity) = Unit
@@ -250,6 +254,9 @@ internal class InMemoryRivalAnalysisDao : RivalAnalysisDao {
         rows.value.firstOrNull { it.id == id }
 
     override suspend fun getAllOnce(): List<RivalAnalysisEntity> = rows.value
+
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): RivalAnalysisEntity? =
+        rows.value.firstOrNull { it.syncId == syncId }
 
     override suspend fun insert(entity: RivalAnalysisEntity): Long {
         val id = if (entity.id == 0) nextId++ else entity.id
@@ -293,6 +300,9 @@ internal class InMemoryRivalLinkDao : RivalLinkDao {
         rows.value.firstOrNull { it.id == id }
 
     override suspend fun getAllOnce(): List<RivalLinkEntity> = rows.value
+
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): RivalLinkEntity? =
+        rows.value.firstOrNull { it.syncId == syncId }
 
     override suspend fun insert(entity: RivalLinkEntity): Long {
         val id = if (entity.id == 0) nextId++ else entity.id
@@ -340,6 +350,9 @@ internal class InMemoryOpponentPlayerDao : OpponentPlayerDao {
         rows.value.firstOrNull { it.id == id }
 
     override suspend fun getAllOnce(): List<OpponentPlayerEntity> = rows.value
+
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): OpponentPlayerEntity? =
+        rows.value.firstOrNull { it.syncId == syncId }
 
     override suspend fun insert(entity: OpponentPlayerEntity): Long {
         val id = if (entity.id == 0) nextId++ else entity.id

@@ -83,6 +83,11 @@ fun TaskListScreen(
     var pendingDelete by remember { mutableStateOf<Task?>(null) }
     var viewingPath by remember { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(tasks, editing?.id) {
+        val id = editing?.id ?: return@LaunchedEffect
+        tasks.firstOrNull { it.id == id }?.let { editing = it }
+    }
+
     if (creating || editing != null) {
         TaskEditDialog(
             current = editing,

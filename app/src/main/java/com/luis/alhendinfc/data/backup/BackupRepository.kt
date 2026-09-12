@@ -379,7 +379,7 @@ class BackupRepository(
         private const val SAFETY_DIR = "safety_backups"
         private const val SAFETY_KEEP = 5
 
-        /** Todas las tablas Room de la app (estadísticas = matches + events + match_player). */
+        /** Tablas deportivas del ZIP. `sync_outbox` no viaja: se reconstruye al sincronizar. */
         val ALL_TABLES = listOf(
             "team",
             "player",

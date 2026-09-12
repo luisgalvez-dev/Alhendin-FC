@@ -11,6 +11,8 @@ import com.luis.alhendinfc.data.local.TrainingEntity
 import com.luis.alhendinfc.data.local.TrainingTaskDao
 import com.luis.alhendinfc.data.local.TrainingTaskEntity
 import com.luis.alhendinfc.data.sync.AttachmentParentType
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.CalendarDate
 import com.luis.alhendinfc.domain.model.Task
 import com.luis.alhendinfc.domain.model.Training
@@ -68,23 +70,33 @@ class TrainingRepositoryImpl(
         require(canCreate(training.teamId, epoch)) {
             "No se puede crear un entrenamiento: ese día ya tiene partido, jornada o entrenamiento"
         }
-        return trainingDao.insert(
-            EntityWrites.trainingForInsert(training.toEntity().copy(dateEpochDay = epoch), EntitySync.now())
-        ).toInt()
+        val stamped = EntityWrites.trainingForInsert(training.toEntity().copy(dateEpochDay = epoch), EntitySync.now())
+        return SyncHooks.local(SyncEntityType.TRAINING, stamped.syncId) {
+            trainingDao.insert(stamped).toInt()
+        }
     }
 
     override suspend fun update(training: Training) {
         val existing = trainingDao.getByIdOnce(training.id) ?: return
-        trainingDao.update(EntityWrites.trainingForUpdate(existing, training.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.TRAINING, existing.syncId) {
+            trainingDao.update(EntityWrites.trainingForUpdate(existing, training.toEntity(), EntitySync.now()))
+        }
     }
 
     override suspend fun delete(training: Training) {
         val now = EntitySync.now()
         val existing = trainingDao.getByIdIncludingDeleted(training.id) ?: return
-        trainingDao.markDeleted(training.id, now)
-        trainingTaskDao.markDeletedByTraining(training.id, now)
-        if (existing.syncId.isNotBlank()) {
-            attachmentDao.markDeletedByParent(AttachmentParentType.TRAINING, existing.syncId, now)
+        val tasks = trainingTaskDao.getAllOnce().filter { it.trainingId == training.id }
+        val items = buildList {
+            add(SyncEntityType.TRAINING to existing.syncId)
+            tasks.forEach { add(SyncEntityType.TRAINING_TASK to it.syncId) }
+        }
+        SyncHooks.localMany(items) {
+            trainingDao.markDeleted(training.id, now)
+            trainingTaskDao.markDeletedByTraining(training.id, now)
+            if (existing.syncId.isNotBlank()) {
+                attachmentDao.markDeletedByParent(AttachmentParentType.TRAINING, existing.syncId, now)
+            }
         }
     }
 
@@ -95,21 +107,26 @@ class TrainingRepositoryImpl(
         val nextOrder = (trainingTaskDao.getActiveByTrainingOnce(trainingId).maxOfOrNull { it.sortOrder } ?: -1) + 1
         if (existing != null) {
             if (existing.deletedAt == null) return
-            trainingTaskDao.update(EntityWrites.trainingTaskForRevive(existing, nextOrder, now))
+            SyncHooks.local(SyncEntityType.TRAINING_TASK, existing.syncId) {
+                trainingTaskDao.update(EntityWrites.trainingTaskForRevive(existing, nextOrder, now))
+            }
             return
         }
-        trainingTaskDao.insert(
-            EntityWrites.trainingTaskForInsert(
-                TrainingTaskEntity(trainingId = training.id, taskId = taskId, sortOrder = nextOrder),
-                now
-            )
+        val stamped = EntityWrites.trainingTaskForInsert(
+            TrainingTaskEntity(trainingId = training.id, taskId = taskId, sortOrder = nextOrder),
+            now
         )
+        SyncHooks.local(SyncEntityType.TRAINING_TASK, stamped.syncId) {
+            trainingTaskDao.insert(stamped)
+        }
     }
 
     override suspend fun removeTask(trainingId: Int, taskId: Int) {
         val existing = trainingTaskDao.getByTrainingAndTaskIncludingDeleted(trainingId, taskId) ?: return
         if (existing.deletedAt != null) return
-        trainingTaskDao.markDeleted(existing.id, EntitySync.now())
+        SyncHooks.local(SyncEntityType.TRAINING_TASK, existing.syncId) {
+            trainingTaskDao.markDeleted(existing.id, EntitySync.now())
+        }
     }
 
     override suspend fun moveTask(trainingId: Int, taskId: Int, up: Boolean) {
@@ -121,8 +138,15 @@ class TrainingRepositoryImpl(
         val a = rows[index]
         val b = rows[swapWith]
         val now = EntitySync.now()
-        trainingTaskDao.update(a.copy(sortOrder = b.sortOrder, updatedAt = now))
-        trainingTaskDao.update(b.copy(sortOrder = a.sortOrder, updatedAt = now))
+        SyncHooks.localMany(
+            listOf(
+                SyncEntityType.TRAINING_TASK to a.syncId,
+                SyncEntityType.TRAINING_TASK to b.syncId
+            )
+        ) {
+            trainingTaskDao.update(a.copy(sortOrder = b.sortOrder, updatedAt = now))
+            trainingTaskDao.update(b.copy(sortOrder = a.sortOrder, updatedAt = now))
+        }
     }
 
     private fun TrainingEntity.toDomain() = Training(

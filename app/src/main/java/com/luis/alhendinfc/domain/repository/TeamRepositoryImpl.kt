@@ -4,6 +4,8 @@ import com.luis.alhendinfc.data.local.EntitySync
 import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.TeamDao
 import com.luis.alhendinfc.data.local.TeamEntity
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.Team
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -22,16 +24,23 @@ class TeamRepositoryImpl(private val dao: TeamDao) : TeamRepository {
             team.toEntity().copy(isSelected = isFirst),
             EntitySync.now()
         )
-        return dao.insertTeam(stamped).toInt()
+        return SyncHooks.local(SyncEntityType.TEAM, stamped.syncId) {
+            dao.insertTeam(stamped).toInt()
+        }
     }
 
     override suspend fun updateTeam(team: Team) {
         val existing = dao.getByIdOnce(team.id) ?: return
-        dao.updateTeam(EntityWrites.teamForUpdate(existing, team.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.TEAM, existing.syncId) {
+            dao.updateTeam(EntityWrites.teamForUpdate(existing, team.toEntity(), EntitySync.now()))
+        }
     }
 
     override suspend fun deleteTeam(team: Team) {
-        dao.markDeleted(team.id, EntitySync.now())
+        val existing = dao.getByIdIncludingDeleted(team.id) ?: dao.getByIdOnce(team.id) ?: return
+        SyncHooks.local(SyncEntityType.TEAM, existing.syncId) {
+            dao.markDeleted(team.id, EntitySync.now())
+        }
     }
 
     override suspend fun selectTeam(teamId: Int) {

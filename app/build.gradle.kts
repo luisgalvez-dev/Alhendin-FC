@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -66,6 +67,11 @@ android {
     sourceSets {
         getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 ksp {
@@ -93,9 +99,17 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    implementation(libs.androidx.lifecycle.process)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
+    implementation(libs.kotlinx.coroutines.play.services)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.org.json)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.androidx.room.testing)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -109,4 +123,12 @@ tasks.register("testDebugUnitTest") {
     group = "verification"
     description = "Alias de testStableDebugUnitTest (flavor por defecto)."
     dependsOn("testStableDebugUnitTest")
+}
+
+// JSON oficial por flavor: app/src/dev/google-services.json (com.luis.alhendinfc.dev).
+// Stable no tiene cliente Firebase todavía: no procesar Google Services en esos variants.
+tasks.configureEach {
+    if (name.startsWith("process") && name.endsWith("GoogleServices") && !name.contains("Dev")) {
+        enabled = false
+    }
 }

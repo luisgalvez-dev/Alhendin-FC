@@ -51,6 +51,9 @@ interface TaskDao {
     @Query("SELECT * FROM task ORDER BY id ASC")
     suspend fun getAllOnce(): List<TaskEntity>
 
+    @Query("SELECT * FROM task WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): TaskEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: TaskEntity): Long
 

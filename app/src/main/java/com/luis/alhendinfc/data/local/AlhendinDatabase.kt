@@ -6,6 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.luis.alhendinfc.data.sync.SyncHooks
+import com.luis.alhendinfc.data.sync.SyncWriteGate
 
 @Database(
     entities = [
@@ -24,9 +26,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RivalAnalysisEntity::class,
         RivalLinkEntity::class,
         OpponentPlayerEntity::class,
-        BoardEntity::class
+        BoardEntity::class,
+        SyncOutboxEntity::class
     ],
-    version = 20,
+    version = 21,
     exportSchema = true
 )
 abstract class AlhendinDatabase : RoomDatabase() {
@@ -46,9 +49,10 @@ abstract class AlhendinDatabase : RoomDatabase() {
     abstract fun rivalLinkDao(): RivalLinkDao
     abstract fun opponentPlayerDao(): OpponentPlayerDao
     abstract fun boardDao(): BoardDao
+    abstract fun syncOutboxDao(): SyncOutboxDao
 
     companion object {
-        const val VERSION = 20
+        const val VERSION = 21
         const val NAME = "alhendin_db"
 
         @Volatile
@@ -149,11 +153,15 @@ abstract class AlhendinDatabase : RoomDatabase() {
                         Migration16To17,
                         Migration17To18,
                         Migration18To19,
-                        Migration19To20
+                        Migration19To20,
+                        Migration20To21
                     )
                     .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
                     .build()
-                    .also { INSTANCE = it }
+                    .also { db ->
+                        INSTANCE = db
+                        SyncHooks.gate = SyncWriteGate(db)
+                    }
             }
         }
 
@@ -162,6 +170,7 @@ abstract class AlhendinDatabase : RoomDatabase() {
             synchronized(this) {
                 INSTANCE?.close()
                 INSTANCE = null
+                SyncHooks.gate = null
             }
         }
     }

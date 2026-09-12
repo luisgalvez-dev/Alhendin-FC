@@ -33,6 +33,9 @@ interface CustomStatTypeDao {
     @Query("SELECT * FROM custom_stat_type ORDER BY id ASC")
     suspend fun getAllOnce(): List<CustomStatTypeEntity>
 
+    @Query("SELECT * FROM custom_stat_type WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): CustomStatTypeEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(entities: List<CustomStatTypeEntity>)
 

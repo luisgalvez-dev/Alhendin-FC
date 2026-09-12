@@ -17,7 +17,7 @@ class BackupUpgradeAndValidatorTest {
     fun v14Upgrade_assignsUuidsAndEpochDay_keepsIds() {
         val originalJson = v14Json()
         val payload = BackupValidator.validateJson(originalJson)
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(1, payload.teams.size)
         assertEquals(17, payload.teams[0].id)
         assertTrue(payload.teams[0].syncId.isNotBlank())
@@ -44,7 +44,7 @@ class BackupUpgradeAndValidatorTest {
     fun v15_preservesSyncIds() {
         val payload = BackupValidator.validateJson(v15Json("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
         assertEquals("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.teams[0].syncId)
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertTrue(payload.tasks.isEmpty())
         assertTrue(payload.trainings.isEmpty())
     }
@@ -87,30 +87,32 @@ class BackupUpgradeAndValidatorTest {
     }
 
     @Test
-    fun schema13And21_areRejected_v20IsAccepted() {
+    fun schema13And22_areRejected_v21IsAccepted() {
         assertThrows(IllegalArgumentException::class.java) {
             BackupValidator.validateJson(BackupValidatorTest.validJson(13))
         }
         assertThrows(IllegalArgumentException::class.java) {
-            BackupValidator.validateJson(BackupValidatorTest.validJson(21))
+            BackupValidator.validateJson(BackupValidatorTest.validJson(22))
         }
+        val v21 = BackupValidator.validateJson(BackupValidatorTest.validJson(21))
+        assertEquals(21, v21.schemaVersion)
         val v20 = BackupValidator.validateJson(BackupValidatorTest.validJson(20))
-        assertEquals(20, v20.schemaVersion)
+        assertEquals(21, v20.schemaVersion)
         val v19 = BackupValidator.validateJson(BackupValidatorTest.validJson(19))
-        assertEquals(20, v19.schemaVersion)
+        assertEquals(21, v19.schemaVersion)
         assertTrue(v19.boards.isEmpty())
         val v18 = BackupValidator.validateJson(BackupValidatorTest.validJson(18))
-        assertEquals(20, v18.schemaVersion)
+        assertEquals(21, v18.schemaVersion)
         val v17 = BackupValidator.validateJson(BackupValidatorTest.validJson(17))
-        assertEquals(20, v17.schemaVersion)
+        assertEquals(21, v17.schemaVersion)
         val v16 = BackupValidator.validateJson(BackupValidatorTest.validJson(16))
-        assertEquals(20, v16.schemaVersion)
+        assertEquals(21, v16.schemaVersion)
     }
 
     @Test
     fun v16_restoresTasksKeepingIdsSyncIdsAndTombstones() {
         val payload = BackupValidator.validateJson(v16JsonWithTasks())
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(2, payload.tasks.size)
         assertEquals(10, payload.tasks[0].id)
         assertEquals("task-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.tasks[0].syncId)
@@ -164,7 +166,7 @@ class BackupUpgradeAndValidatorTest {
     @Test
     fun v17_restoresTrainingTasksAttachmentsKeepingIdsSyncIdsAndTombstones() {
         val payload = BackupValidator.validateJson(v17Json())
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(1, payload.trainings.size)
         assertEquals(21, payload.trainings[0].id)
         assertEquals("tr-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.trainings[0].syncId)
@@ -188,7 +190,7 @@ class BackupUpgradeAndValidatorTest {
     @Test
     fun v18_restoresAnalysesAndLinksKeepingIdsSyncIdsAndTombstones() {
         val payload = BackupValidator.validateJson(v18Json())
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(1, payload.rivalAnalyses.size)
         assertEquals(40, payload.rivalAnalyses[0].id)
         assertEquals("an-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.rivalAnalyses[0].syncId)
@@ -208,7 +210,7 @@ class BackupUpgradeAndValidatorTest {
     @Test
     fun v19_restoresOpponentPlayersKeepingIdsSyncIdsAndTombstones() {
         val payload = BackupValidator.validateJson(v19Json())
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(2, payload.opponentPlayers.size)
         assertEquals(60, payload.opponentPlayers[0].id)
         assertEquals("op-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.opponentPlayers[0].syncId)
@@ -225,7 +227,7 @@ class BackupUpgradeAndValidatorTest {
     @Test
     fun v20_restoresBoardsKeepingIdsSyncIdsSceneAndTombstones() {
         val payload = BackupValidator.validateJson(v20Json())
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(2, payload.boards.size)
         assertEquals(70, payload.boards[0].id)
         assertEquals("bd-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.boards[0].syncId)
@@ -243,7 +245,7 @@ class BackupUpgradeAndValidatorTest {
     @Test
     fun v20_keepsMatchAttachmentsWithoutNewRoomVersion() {
         val payload = BackupValidator.validateJson(v20Json())
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(2, payload.attachments.size)
         assertEquals("MATCH", payload.attachments[0].parentType)
         assertEquals("match-sync-aaaa-aaaa-aaaa-aaaaaaaaaaaa", payload.attachments[0].parentSyncId)

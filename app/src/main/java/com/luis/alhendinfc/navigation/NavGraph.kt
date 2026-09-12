@@ -8,14 +8,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.luis.alhendinfc.cloud.AlhendinCloud
+import com.luis.alhendinfc.cloud.auth.AuthSession
+import com.luis.alhendinfc.data.sync.SyncUiStatus
+import kotlinx.coroutines.launch
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.luis.alhendinfc.domain.model.HomeModule
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.Player
@@ -43,6 +49,7 @@ import com.luis.alhendinfc.ui.players.PlayerDetailScreen
 import com.luis.alhendinfc.ui.players.PlayerEditDialog
 import com.luis.alhendinfc.ui.players.PlayerListScreen
 import com.luis.alhendinfc.ui.players.PlayerViewModel
+import com.luis.alhendinfc.ui.settings.AllModulesScreen
 import com.luis.alhendinfc.ui.settings.CustomizeHomeScreen
 import com.luis.alhendinfc.ui.settings.CustomizeHomeViewModel
 import com.luis.alhendinfc.ui.settings.EventTypesViewModel
@@ -98,6 +105,9 @@ sealed class AppScreen(val route: String) {
         fun createRoute(teamId: Int) = "settings/$teamId"
     }
     object CustomizeHome : AppScreen("customize_home")
+    object AllModules : AppScreen("all_modules/{teamId}") {
+        fun createRoute(teamId: Int) = "all_modules/$teamId"
+    }
     object Pizarra : AppScreen("pizarra/{teamId}") {
         fun createRoute(teamId: Int) = "pizarra/$teamId"
     }
@@ -130,6 +140,8 @@ fun AlhendinNavGraph(navController: NavHostController) {
             val layoutConfig by homeVm.layoutConfig.collectAsStateWithLifecycle()
             val nextFixture by homeVm.nextFixture.collectAsStateWithLifecycle()
             val liveMatch by homeVm.liveMatch.collectAsStateWithLifecycle()
+            val cloud = remember { AlhendinCloud.getInstance(context.applicationContext) }
+            val syncStatus by cloud.engine.status.collectAsStateWithLifecycle()
 
             HomeScreen(
                 teams = teams,
@@ -175,7 +187,13 @@ fun AlhendinNavGraph(navController: NavHostController) {
                     navController.navigate(AppScreen.Calendar.createRoute(teamId))
                 },
                 onAddTeam = { teamViewModel.addTeam(it) },
-                onSelectTeam = { teamViewModel.selectTeam(it) }
+                onSelectTeam = { teamViewModel.selectTeam(it) },
+                connectionLabel = when (syncStatus) {
+                    SyncUiStatus.OFFLINE -> "Sin conexión"
+                    SyncUiStatus.PENDING -> "Pendiente de sincronizar"
+                    SyncUiStatus.UNAVAILABLE -> "Firebase no configurado"
+                    SyncUiStatus.SYNCED -> null
+                }
             )
         }
 
@@ -398,12 +416,33 @@ fun AlhendinNavGraph(navController: NavHostController) {
                 teamId = teamId,
                 team = selectedTeam,
                 onCustomizeHome = { navController.navigate(AppScreen.CustomizeHome.route) },
+                onAllModules = { navController.navigate(AppScreen.AllModules.createRoute(teamId)) },
                 onBack = { navController.popBackStack() }
             )
         }
 
         composable(AppScreen.CustomizeHome.route) {
             CustomizeHomeRoute(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = AppScreen.AllModules.route,
+            arguments = listOf(navArgument("teamId") { type = NavType.IntType })
+        ) { backStack ->
+            val teamId = backStack.arguments!!.getInt("teamId")
+            val homeVm: HomeViewModel = viewModel(
+                factory = HomeViewModel.factory(context.applicationContext)
+            )
+            LaunchedEffect(selectedTeam?.id) {
+                homeVm.setTeamId(selectedTeam?.id)
+            }
+            val liveMatch by homeVm.liveMatch.collectAsStateWithLifecycle()
+            AllModulesScreen(
+                onOpenModule = { module ->
+                    navController.navigateToModule(module, selectedTeam?.id ?: teamId, liveMatch?.id)
+                },
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(
@@ -877,7 +916,8 @@ private fun PizarraRoute(
         onPendingText = vm::setPendingText,
         onDeleteSelected = vm::deleteSelected,
         onUpdateNumber = vm::updateSelectedNumber,
-        onUpdateText = vm::updateSelectedText
+        onUpdateText = vm::updateSelectedText,
+        onSavedConsumed = vm::consumeSaved
     )
 }
 
@@ -975,6 +1015,7 @@ private fun SettingsRoute(
     teamId: Int,
     team: com.luis.alhendinfc.domain.model.Team?,
     onCustomizeHome: () -> Unit,
+    onAllModules: () -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -985,6 +1026,11 @@ private fun SettingsRoute(
     val types by vm.types.collectAsStateWithLifecycle()
     val backupBusy by vm.backupBusy.collectAsStateWithLifecycle()
     val backupMessage by vm.backupMessage.collectAsStateWithLifecycle()
+    val cloud = remember { AlhendinCloud.getInstance(context.applicationContext) }
+    val session by cloud.session.collectAsStateWithLifecycle()
+    val syncStatus by cloud.engine.status.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val ready = session as? AuthSession.Ready
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
@@ -1014,6 +1060,19 @@ private fun SettingsRoute(
         onToggleActive = vm::setActive,
         onDelete = vm::delete,
         onCustomizeHome = onCustomizeHome,
+        onAllModules = onAllModules,
+        accountName = ready?.user?.displayName,
+        accountEmail = ready?.user?.email,
+        workspaceId = ready?.workspaceId,
+        syncStatusLabel = when (syncStatus) {
+            SyncUiStatus.SYNCED -> "Sincronizado"
+            SyncUiStatus.PENDING -> "Pendiente"
+            SyncUiStatus.OFFLINE -> "Sin conexión"
+            SyncUiStatus.UNAVAILABLE -> "Firebase no configurado"
+        },
+        onSignOut = {
+            scope.launch { cloud.signOut() }
+        },
         onBack = onBack
     )
 }
@@ -1056,4 +1115,28 @@ private fun StatisticsRoute(
         finishedMatchCount = finished.size,
         onBack = onBack
     )
+}
+
+private fun NavHostController.navigateToModule(
+    module: HomeModule,
+    teamId: Int,
+    liveMatchId: Int?
+) {
+    val validTeam = teamId > 0
+    when (module) {
+        HomeModule.TEAM -> navigate(AppScreen.Team.route)
+        HomeModule.MATCHES -> if (validTeam) navigate(AppScreen.Matches.createRoute(teamId))
+        HomeModule.CALENDAR -> if (validTeam) navigate(AppScreen.Calendar.createRoute(teamId))
+        HomeModule.TASKS -> if (validTeam) navigate(AppScreen.Tasks.createRoute(teamId))
+        HomeModule.RIVALS -> if (validTeam) navigate(AppScreen.Rivals.createRoute(teamId))
+        HomeModule.PIZARRA -> if (validTeam) navigate(AppScreen.Pizarra.createRoute(teamId))
+        HomeModule.STATISTICS -> if (validTeam) navigate(AppScreen.Statistics.createRoute(teamId))
+        HomeModule.SETTINGS -> if (validTeam) navigate(AppScreen.Settings.createRoute(teamId))
+        HomeModule.NEXT_MATCH -> if (validTeam) navigate(AppScreen.Calendar.createRoute(teamId))
+        HomeModule.LIVE_MATCH -> when {
+            validTeam && liveMatchId != null ->
+                navigate(AppScreen.LiveMatch.createRoute(teamId, liveMatchId))
+            validTeam -> navigate(AppScreen.Matches.createRoute(teamId))
+        }
+    }
 }

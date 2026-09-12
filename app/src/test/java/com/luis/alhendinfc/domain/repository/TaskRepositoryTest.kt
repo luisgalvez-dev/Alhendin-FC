@@ -152,6 +152,9 @@ private class InMemoryTaskDao : TaskDao {
 
     override suspend fun getAllOnce(): List<TaskEntity> = rows.sortedBy { it.id }
 
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): TaskEntity? =
+        rows.firstOrNull { it.syncId == syncId }
+
     override suspend fun insert(entity: TaskEntity): Long {
         val id = if (entity.id == 0) seq++ else entity.id
         if (id >= seq) seq = id + 1

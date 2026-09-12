@@ -21,9 +21,15 @@ interface PlayerDao {
     @Query("SELECT * FROM player WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getByIdOnce(id: Int): PlayerEntity?
 
+    @Query("SELECT * FROM player WHERE id = :id LIMIT 1")
+    suspend fun getByIdIncludingDeleted(id: Int): PlayerEntity?
+
     /** Incluye tombstones. Uso interno / backup / futura sync. */
     @Query("SELECT * FROM player ORDER BY id ASC")
     suspend fun getAllOnce(): List<PlayerEntity>
+
+    @Query("SELECT * FROM player WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): PlayerEntity?
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(player: PlayerEntity): Long

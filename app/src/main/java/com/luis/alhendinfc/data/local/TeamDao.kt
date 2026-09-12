@@ -20,9 +20,15 @@ interface TeamDao {
     @Query("SELECT * FROM team WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getByIdOnce(id: Int): TeamEntity?
 
+    @Query("SELECT * FROM team WHERE id = :id LIMIT 1")
+    suspend fun getByIdIncludingDeleted(id: Int): TeamEntity?
+
     /** Incluye tombstones. Uso interno / backup / futura sync. */
     @Query("SELECT * FROM team ORDER BY id ASC")
     suspend fun getAllOnce(): List<TeamEntity>
+
+    @Query("SELECT * FROM team WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): TeamEntity?
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(teams: List<TeamEntity>)

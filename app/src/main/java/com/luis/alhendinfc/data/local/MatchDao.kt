@@ -40,6 +40,15 @@ interface MatchDao {
     @Query("SELECT * FROM match_table ORDER BY id ASC")
     suspend fun getAllMatchesOnce(): List<MatchEntity>
 
+    @Query("SELECT * FROM match_table WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): MatchEntity?
+
+    @Query("SELECT * FROM match_player WHERE syncId = :syncId LIMIT 1")
+    suspend fun getMatchPlayerBySyncIdIncludingDeleted(syncId: String): MatchPlayerEntity?
+
+    @Query("SELECT * FROM match_player WHERE matchId = :matchId")
+    suspend fun getMatchPlayersByMatchIncludingDeleted(matchId: Int): List<MatchPlayerEntity>
+
     @Query(
         """
         SELECT COUNT(*) FROM match_table

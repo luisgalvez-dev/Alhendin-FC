@@ -368,6 +368,10 @@ class PizarraViewModel(
         }
     }
 
+    fun consumeSaved() {
+        _uiState.update { it.copy(saved = false) }
+    }
+
     suspend fun persist() {
         val state = _uiState.value
         val scene = BoardScene(

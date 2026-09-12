@@ -44,6 +44,7 @@ internal class RoomBackupMutator(
         BackupRepository.ALL_TABLES.forEach { table ->
             sql.execSQL("DELETE FROM `$table`")
         }
+        sql.execSQL("DELETE FROM `sync_outbox`")
     }
 
     override suspend fun insertBackup(payload: ValidatedBackup) {

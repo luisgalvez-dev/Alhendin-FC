@@ -9,10 +9,10 @@ import org.junit.Test
 class RoomSchemaPhase0Test {
 
     @Test
-    fun roomVersionIs20AndSchemaExportIsEnabled() {
-        assertEquals(20, AlhendinDatabase.VERSION)
+    fun roomVersionIs21AndSchemaExportIsEnabled() {
+        assertEquals(21, AlhendinDatabase.VERSION)
         val source = databaseSource()
-        assertTrue(source.contains("version = 20"))
+        assertTrue(source.contains("version = 21"))
         assertTrue(source.contains("exportSchema = true"))
         assertTrue(source.contains("Migration14To15"))
         assertTrue(source.contains("Migration15To16"))
@@ -20,6 +20,7 @@ class RoomSchemaPhase0Test {
         assertTrue(source.contains("Migration17To18"))
         assertTrue(source.contains("Migration18To19"))
         assertTrue(source.contains("Migration19To20"))
+        assertTrue(source.contains("Migration20To21"))
     }
 
     @Test
@@ -40,6 +41,17 @@ class RoomSchemaPhase0Test {
         assertTrue(text.contains("syncId"))
         assertTrue(text.contains("dateEpochDay"))
         assertFalse(text.contains("index_team_deletedAt") || text.contains("index_player_deletedAt"))
+    }
+
+    @Test
+    fun schemaV21FileIsExportedWithSyncOutbox() {
+        val schema = schemaFile(21)
+        requireNotNull(schema) { "No se encontró el schema Room v21. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 21") || text.contains("\"version\":21"))
+        assertTrue(text.contains("\"tableName\": \"sync_outbox\""))
+        assertTrue(text.contains("entitySyncId"))
+        assertFalse(text.contains("index_sync_outbox_deletedAt"))
     }
 
     @Test

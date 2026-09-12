@@ -38,6 +38,9 @@ interface RivalLinkDao {
     @Query("SELECT * FROM rival_link ORDER BY id ASC")
     suspend fun getAllOnce(): List<RivalLinkEntity>
 
+    @Query("SELECT * FROM rival_link WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): RivalLinkEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: RivalLinkEntity): Long
 

@@ -19,3 +19,9 @@
 # Keep data classes used in JSON backup
 -keepclassmembers class com.luis.alhendinfc.data.local.** { *; }
 -keepclassmembers class com.luis.alhendinfc.domain.model.** { *; }
+
+# Firebase Auth + Firestore
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.android.gms.**

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,11 +67,17 @@ fun SettingsScreen(
     onClearBackupMessage: () -> Unit = {},
     onExportBackup: () -> Unit = {},
     onImportBackup: () -> Unit = {},
+    accountName: String? = null,
+    accountEmail: String? = null,
+    workspaceId: String? = null,
+    syncStatusLabel: String? = null,
+    onSignOut: (() -> Unit)? = null,
     onAdd: (label: String, shortLabel: String, appliesTo: CustomStatAppliesTo) -> Unit,
     onUpdate: (CustomStatType, label: String, shortLabel: String, appliesTo: CustomStatAppliesTo) -> Unit,
     onToggleActive: (CustomStatType, Boolean) -> Unit,
     onDelete: (CustomStatType) -> Unit,
     onCustomizeHome: () -> Unit,
+    onAllModules: () -> Unit = {},
     onBack: () -> Unit
 ) {
     var editing by remember { mutableStateOf<CustomStatType?>(null) }
@@ -209,6 +216,38 @@ fun SettingsScreen(
                 .padding(padding)
                 .padding(20.dp)
         ) {
+            if (!accountEmail.isNullOrBlank() || onSignOut != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2A1E)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text("Cuenta", fontWeight = FontWeight.Bold, color = Color.White)
+                        if (!accountName.isNullOrBlank()) {
+                            Text(accountName, color = Color.White)
+                        }
+                        if (!accountEmail.isNullOrBlank()) {
+                            Text(accountEmail, color = GreenMint, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (!workspaceId.isNullOrBlank()) {
+                            Text("Espacio: $workspaceId", color = GreenMint, style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (!syncStatusLabel.isNullOrBlank()) {
+                            Text(syncStatusLabel, color = AmberAccent, style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (onSignOut != null) {
+                            TextButton(onClick = onSignOut) { Text("Cerrar sesión") }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2A1E)),
                 shape = RoundedCornerShape(12.dp),
@@ -237,6 +276,41 @@ fun SettingsScreen(
                         )
                         Text(
                             "Atajos del Home: mostrar, ocultar y ordenar",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GreenMint
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2A1E)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onAllModules)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.List,
+                        contentDescription = null,
+                        tint = GreenAccent,
+                        modifier = Modifier.padding(end = 2.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Todos los módulos",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            "Acceso a cualquier módulo, aunque esté oculto en Inicio",
                             style = MaterialTheme.typography.labelSmall,
                             color = GreenMint
                         )

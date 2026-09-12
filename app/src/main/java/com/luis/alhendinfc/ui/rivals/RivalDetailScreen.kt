@@ -32,6 +32,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
@@ -45,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +71,7 @@ import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.util.ImageViewer
 import com.luis.alhendinfc.ui.util.openAttachment
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,6 +99,8 @@ fun RivalDetailScreen(
 ) {
     var tab by remember { mutableIntStateOf(0) }
     var viewingPath by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val tabs = listOf("Resumen", "Plantilla", "Análisis", "Archivos", "Enlaces")
 
     viewingPath?.let { path ->
@@ -125,7 +131,8 @@ fun RivalDetailScreen(
                     navigationIconContentColor = Color.White
                 )
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -167,7 +174,10 @@ fun RivalDetailScreen(
                 2 -> if (club != null) AnalysisTab(
                     clubId = club.id,
                     analysis = analysis,
-                    onSave = onSaveAnalysis
+                    onSave = {
+                        onSaveAnalysis(it)
+                        scope.launch { snackbarHostState.showSnackbar("Análisis guardado") }
+                    }
                 )
                 3 -> FilesTab(
                     attachments = attachments,

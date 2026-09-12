@@ -5,6 +5,8 @@ import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.MatchDao
 import com.luis.alhendinfc.data.local.PlayerDao
 import com.luis.alhendinfc.data.local.PlayerEntity
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.Laterality
 import com.luis.alhendinfc.domain.model.Player
 import com.luis.alhendinfc.domain.model.PlayerPosition
@@ -24,16 +26,24 @@ class PlayerRepositoryImpl(
         dao.getById(id).map { it?.toDomain() }
 
     override suspend fun addPlayer(player: Player) {
-        dao.insert(EntityWrites.playerForInsert(player.toEntity(), EntitySync.now()))
+        val stamped = EntityWrites.playerForInsert(player.toEntity(), EntitySync.now())
+        SyncHooks.local(SyncEntityType.PLAYER, stamped.syncId) {
+            dao.insert(stamped)
+        }
     }
 
     override suspend fun updatePlayer(player: Player) {
         val existing = dao.getByIdOnce(player.id) ?: return
-        dao.update(EntityWrites.playerForUpdate(existing, player.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.PLAYER, existing.syncId) {
+            dao.update(EntityWrites.playerForUpdate(existing, player.toEntity(), EntitySync.now()))
+        }
     }
 
     override suspend fun deletePlayer(player: Player) {
-        dao.markDeleted(player.id, EntitySync.now())
+        val existing = dao.getByIdIncludingDeleted(player.id) ?: dao.getByIdOnce(player.id) ?: return
+        SyncHooks.local(SyncEntityType.PLAYER, existing.syncId) {
+            dao.markDeleted(player.id, EntitySync.now())
+        }
     }
 
     private fun PlayerEntity.toDomain() = Player(

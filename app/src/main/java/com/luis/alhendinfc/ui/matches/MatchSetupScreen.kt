@@ -1025,7 +1025,7 @@ private fun MatchReportsSection(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
         Text("Informes", color = GreenMint, fontWeight = FontWeight.SemiBold)
         Text(
-            "Adjuntos de este partido: un PDF, una foto o un documento que te pasen (acta federativa, foto de pizarra, etc.). El análisis del rival se escribe en Rivales, no aquí.",
+            "Adjuntos de este partido: un PDF, una foto o un documento que te pasen (acta federativa, foto de pizarra, etc.). El análisis del rival se escribe en Rivales, no aquí. Los informes se guardan en este dispositivo hasta que haya Storage.",
             color = Color.White.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall
         )

@@ -27,7 +27,13 @@ internal class InMemoryPlayerDao : PlayerDao {
     override suspend fun getByIdOnce(id: Int): PlayerEntity? =
         rows.firstOrNull { it.id == id && it.deletedAt == null }
 
+    override suspend fun getByIdIncludingDeleted(id: Int): PlayerEntity? =
+        rows.firstOrNull { it.id == id }
+
     override suspend fun getAllOnce(): List<PlayerEntity> = rows.sortedBy { it.id }
+
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): PlayerEntity? =
+        rows.firstOrNull { it.syncId == syncId }
 
     override suspend fun insert(player: PlayerEntity): Long {
         val id = if (player.id == 0) seq++ else player.id

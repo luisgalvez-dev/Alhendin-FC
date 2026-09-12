@@ -4,6 +4,8 @@ import com.luis.alhendinfc.data.local.EntitySync
 import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.TaskDao
 import com.luis.alhendinfc.data.local.TaskEntity
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.Task
 import com.luis.alhendinfc.domain.model.TaskRules
 import kotlinx.coroutines.flow.Flow
@@ -31,25 +33,35 @@ class TaskRepositoryImpl(
     override suspend fun add(task: Task): Int {
         val error = TaskRules.validate(task.name, task.playerCount, task.durationMinutes)
         require(error == null) { error!! }
-        return dao.insert(EntityWrites.taskForInsert(task.toEntity(), EntitySync.now())).toInt()
+        val stamped = EntityWrites.taskForInsert(task.toEntity(), EntitySync.now())
+        return SyncHooks.local(SyncEntityType.TASK, stamped.syncId) {
+            dao.insert(stamped).toInt()
+        }
     }
 
     override suspend fun update(task: Task) {
         val error = TaskRules.validate(task.name, task.playerCount, task.durationMinutes)
         require(error == null) { error!! }
         val existing = dao.getByIdOnce(task.id) ?: return
-        dao.update(EntityWrites.taskForUpdate(existing, task.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.TASK, existing.syncId) {
+            dao.update(EntityWrites.taskForUpdate(existing, task.toEntity(), EntitySync.now()))
+        }
     }
 
     override suspend fun setBoardSyncId(taskId: Int, boardSyncId: String?) {
         val existing = dao.getByIdOnce(taskId) ?: return
-        dao.update(
-            EntityWrites.taskForUpdate(existing, existing.copy(boardSyncId = boardSyncId), EntitySync.now())
-        )
+        SyncHooks.local(SyncEntityType.TASK, existing.syncId) {
+            dao.update(
+                EntityWrites.taskForUpdate(existing, existing.copy(boardSyncId = boardSyncId), EntitySync.now())
+            )
+        }
     }
 
     override suspend fun delete(task: Task) {
-        dao.markDeleted(task.id, EntitySync.now())
+        val existing = dao.getByIdIncludingDeleted(task.id) ?: dao.getByIdOnce(task.id) ?: return
+        SyncHooks.local(SyncEntityType.TASK, existing.syncId) {
+            dao.markDeleted(task.id, EntitySync.now())
+        }
     }
 
     private fun TaskEntity.toDomain() = Task(

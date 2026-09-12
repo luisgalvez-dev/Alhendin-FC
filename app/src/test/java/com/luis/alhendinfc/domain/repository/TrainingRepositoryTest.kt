@@ -211,6 +211,9 @@ internal class InMemoryTrainingDao : TrainingDao {
 
     override suspend fun getAllOnce(): List<TrainingEntity> = rows.sortedBy { it.id }
 
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): TrainingEntity? =
+        rows.firstOrNull { it.syncId == syncId }
+
     override suspend fun insert(entity: TrainingEntity): Long {
         val id = if (entity.id == 0) seq++ else entity.id
         if (id >= seq) seq = id + 1
@@ -258,6 +261,9 @@ internal class InMemoryTrainingTaskDao : TrainingTaskDao {
         rows.firstOrNull { it.trainingId == trainingId && it.taskId == taskId }
 
     override suspend fun getAllOnce(): List<TrainingTaskEntity> = rows.sortedBy { it.id }
+
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): TrainingTaskEntity? =
+        rows.firstOrNull { it.syncId == syncId }
 
     override suspend fun insert(entity: TrainingTaskEntity): Long {
         val id = if (entity.id == 0) seq++ else entity.id
@@ -323,6 +329,9 @@ internal class InMemoryTrainingTaskTaskDao : TaskDao {
 
     override suspend fun getAllOnce(): List<TaskEntity> = rows.sortedBy { it.id }
 
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): TaskEntity? =
+        rows.firstOrNull { it.syncId == syncId }
+
     override suspend fun insert(entity: TaskEntity): Long {
         val id = if (entity.id == 0) seq++ else entity.id
         if (id >= seq) seq = id + 1
@@ -362,6 +371,12 @@ internal class InMemoryOccupancyMatchDao : MatchDao {
     override suspend fun getByIdOnce(id: Int): MatchEntity? =
         rows.firstOrNull { it.id == id && it.deletedAt == null }
     override suspend fun getAllMatchesOnce() = rows.toList()
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): MatchEntity? =
+        rows.firstOrNull { it.syncId == syncId }
+    override suspend fun getMatchPlayerBySyncIdIncludingDeleted(syncId: String): MatchPlayerEntity? =
+        matchPlayers.firstOrNull { it.syncId == syncId }
+    override suspend fun getMatchPlayersByMatchIncludingDeleted(matchId: Int): List<MatchPlayerEntity> =
+        matchPlayers.filter { it.matchId == matchId }
     override suspend fun countActiveByTeamAndDay(teamId: Int, epochDay: Long): Int =
         rows.count { it.teamId == teamId && it.deletedAt == null && it.dateEpochDay == epochDay }
     override suspend fun getAllMatchPlayersOnce() = matchPlayers.sortedBy { it.id }
@@ -479,6 +494,8 @@ internal class InMemoryOccupancyFixtureDao : SeasonFixtureDao {
     override suspend fun countActiveByTeamAndDay(teamId: Int, epochDay: Long): Int =
         rows.count { it.teamId == teamId && it.deletedAt == null && it.dateEpochDay == epochDay }
     override suspend fun getAllOnce(): List<SeasonFixtureEntity> = rows.toList()
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): SeasonFixtureEntity? =
+        rows.firstOrNull { it.syncId == syncId }
     override suspend fun insertAll(entities: List<SeasonFixtureEntity>) {
         entities.forEach { insert(it) }
     }

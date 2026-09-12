@@ -9,6 +9,9 @@ import com.luis.alhendinfc.data.local.MatchEventDao
 import com.luis.alhendinfc.data.local.MatchEventEntity
 import com.luis.alhendinfc.data.local.MatchPlayerEntity
 import com.luis.alhendinfc.data.sync.AttachmentParentType
+import com.luis.alhendinfc.data.sync.LiveMatchGuard
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
@@ -41,43 +44,70 @@ class MatchRepositoryImpl(
     override fun getFinishedCallupsByTeam(teamId: Int): Flow<List<MatchPlayer>> =
         dao.getFinishedCallupsByTeam(teamId).map { list -> list.map { it.toDomain() } }
 
-    override suspend fun createMatch(match: Match): Int =
-        dao.insertMatch(EntityWrites.matchForInsert(match.toEntity(), EntitySync.now())).toInt()
+    override suspend fun createMatch(match: Match): Int {
+        val stamped = EntityWrites.matchForInsert(match.toEntity(), EntitySync.now())
+        return SyncHooks.local(SyncEntityType.MATCH, stamped.syncId) {
+            dao.insertMatch(stamped).toInt()
+        }
+    }
 
     override suspend fun getMatchesByTeamOnce(teamId: Int): List<Match> =
         dao.getMatchesByTeamOnce(teamId).map { it.toDomain() }
 
     override suspend fun updateMatch(match: Match) {
         val existing = dao.getByIdOnce(match.id) ?: return
-        dao.updateMatch(EntityWrites.matchForUpdate(existing, match.toEntity(), EntitySync.now()))
+        if (LiveMatchGuard.isLocalLive(existing.status)) {
+            dao.updateMatch(EntityWrites.matchForUpdate(existing, match.toEntity(), EntitySync.now()))
+            return
+        }
+        SyncHooks.local(SyncEntityType.MATCH, existing.syncId) {
+            dao.updateMatch(EntityWrites.matchForUpdate(existing, match.toEntity(), EntitySync.now()))
+        }
     }
 
     override suspend fun deleteMatch(match: Match) {
         val now = EntitySync.now()
-        eventDao.markDeletedByMatch(match.id, now)
-        dao.markDeletedPlayersByMatch(match.id, now)
-        val syncId = match.syncId.ifBlank { dao.getByIdOnce(match.id)?.syncId.orEmpty() }
-        if (syncId.isNotBlank()) {
-            attachmentDao?.markDeletedByParent(AttachmentParentType.MATCH, syncId, now)
+        val existing = dao.getByIdOnce(match.id) ?: return
+        val events = eventDao.getByMatchIncludingDeleted(match.id)
+        val players = dao.getMatchPlayersByMatchIncludingDeleted(match.id)
+        val items = buildList {
+            add(SyncEntityType.MATCH to existing.syncId)
+            events.forEach { add(SyncEntityType.MATCH_EVENT to it.syncId) }
+            players.forEach { add(SyncEntityType.MATCH_PLAYER to it.syncId) }
         }
-        dao.markDeleted(match.id, now)
+        SyncHooks.localMany(items) {
+            eventDao.markDeletedByMatch(match.id, now)
+            dao.markDeletedPlayersByMatch(match.id, now)
+            val syncId = match.syncId.ifBlank { existing.syncId }
+            if (syncId.isNotBlank()) {
+                attachmentDao?.markDeletedByParent(AttachmentParentType.MATCH, syncId, now)
+            }
+            dao.markDeleted(match.id, now)
+        }
     }
 
     override suspend fun setPlayerCallup(matchId: Int, playerId: Int, status: CallupStatus) {
         val now = EntitySync.now()
         if (status == CallupStatus.NONE) {
-            dao.markDeletedPlayer(matchId, playerId, now)
+            val row = dao.getMatchPlayerOnce(matchId, playerId)
+            SyncHooks.local(SyncEntityType.MATCH_PLAYER, row?.syncId.orEmpty()) {
+                dao.markDeletedPlayer(matchId, playerId, now)
+            }
         } else {
-            dao.upsertMatchPlayerPreservingIdentity(
-                matchId = matchId,
-                playerId = playerId,
-                callupStatus = status.name,
-                isOnField = status == CallupStatus.TITULAR,
-                syncId = EntitySync.newSyncId(),
-                createdAt = now,
-                updatedAt = now,
-                deletedAt = null
-            )
+            val existing = dao.getMatchPlayerOnce(matchId, playerId)
+            val syncId = existing?.syncId?.takeIf { it.isNotBlank() } ?: EntitySync.newSyncId()
+            SyncHooks.local(SyncEntityType.MATCH_PLAYER, syncId) {
+                dao.upsertMatchPlayerPreservingIdentity(
+                    matchId = matchId,
+                    playerId = playerId,
+                    callupStatus = status.name,
+                    isOnField = status == CallupStatus.TITULAR,
+                    syncId = syncId,
+                    createdAt = existing?.createdAt ?: now,
+                    updatedAt = now,
+                    deletedAt = null
+                )
+            }
         }
     }
 
@@ -95,11 +125,28 @@ class MatchRepositoryImpl(
         dao.setOnField(matchId, playerId, onField)
     }
 
-    override suspend fun addEvent(event: MatchEvent): Int =
-        eventDao.insert(EntityWrites.eventForInsert(event.toEntity(), EntitySync.now())).toInt()
+    override suspend fun addEvent(event: MatchEvent): Int {
+        val stamped = EntityWrites.eventForInsert(event.toEntity(), EntitySync.now())
+        val match = dao.getByIdOnce(event.matchId)
+        return if (LiveMatchGuard.shouldPushMatchEvent(match?.status)) {
+            SyncHooks.local(SyncEntityType.MATCH_EVENT, stamped.syncId) {
+                eventDao.insert(stamped).toInt()
+            }
+        } else {
+            eventDao.insert(stamped).toInt()
+        }
+    }
 
     override suspend fun deleteEvent(eventId: Int) {
-        eventDao.markDeleted(eventId, EntitySync.now())
+        val existing = eventDao.getByIdIncludingDeleted(eventId) ?: return
+        val match = dao.getByIdOnce(existing.matchId)
+        if (LiveMatchGuard.shouldPushMatchEvent(match?.status)) {
+            SyncHooks.local(SyncEntityType.MATCH_EVENT, existing.syncId) {
+                eventDao.markDeleted(eventId, EntitySync.now())
+            }
+        } else {
+            eventDao.markDeleted(eventId, EntitySync.now())
+        }
     }
 
     override suspend fun finishMatch(match: Match) {
@@ -123,16 +170,26 @@ class MatchRepositoryImpl(
         fieldSecondsJson: String,
         fieldPositionsJson: String
     ) {
-        dao.markFinished(
-            matchId = matchId,
-            homeScore = homeScore,
-            awayScore = awayScore,
-            livePeriod = livePeriod,
-            liveElapsedSeconds = liveElapsedSeconds,
-            fieldSecondsJson = fieldSecondsJson,
-            fieldPositionsJson = fieldPositionsJson,
-            updatedAt = EntitySync.now()
-        )
+        val match = dao.getByIdOnce(matchId) ?: return
+        val events = eventDao.getByMatchIncludingDeleted(matchId)
+        val players = dao.getMatchPlayersByMatchIncludingDeleted(matchId)
+        val items = buildList {
+            add(SyncEntityType.MATCH to match.syncId)
+            events.forEach { add(SyncEntityType.MATCH_EVENT to it.syncId) }
+            players.forEach { add(SyncEntityType.MATCH_PLAYER to it.syncId) }
+        }
+        SyncHooks.localMany(items) {
+            dao.markFinished(
+                matchId = matchId,
+                homeScore = homeScore,
+                awayScore = awayScore,
+                livePeriod = livePeriod,
+                liveElapsedSeconds = liveElapsedSeconds,
+                fieldSecondsJson = fieldSecondsJson,
+                fieldPositionsJson = fieldPositionsJson,
+                updatedAt = EntitySync.now()
+            )
+        }
     }
 
     override suspend fun updateFieldPositions(matchId: Int, fieldPositionsJson: String) {

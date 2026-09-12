@@ -8,6 +8,8 @@ import com.luis.alhendinfc.data.local.EntitySync
 import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.TaskDao
 import com.luis.alhendinfc.data.sync.AttachmentParentType
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.Board
 import com.luis.alhendinfc.domain.model.BoardRules
 import com.luis.alhendinfc.domain.model.BoardScene
@@ -37,28 +39,31 @@ class BoardRepository(
         val error = BoardRules.validate(board.name)
         require(error == null) { error!! }
         val sceneJson = board.sceneJson.ifBlank { BoardScene.empty().toJson() }
-        return boardDao.insert(
-            EntityWrites.boardForInsert(
-                board.toEntity().copy(
-                    sceneVersion = BoardScene.CURRENT_VERSION,
-                    sceneJson = sceneJson
-                ),
-                EntitySync.now()
-            )
-        ).toInt()
+        val stamped = EntityWrites.boardForInsert(
+            board.toEntity().copy(
+                sceneVersion = BoardScene.CURRENT_VERSION,
+                sceneJson = sceneJson
+            ),
+            EntitySync.now()
+        )
+        return SyncHooks.local(SyncEntityType.BOARD, stamped.syncId) {
+            boardDao.insert(stamped).toInt()
+        }
     }
 
     suspend fun update(board: Board) {
         val error = BoardRules.validate(board.name)
         require(error == null) { error!! }
         val existing = boardDao.getByIdOnce(board.id) ?: return
-        boardDao.update(
-            EntityWrites.boardForUpdate(
-                existing,
-                board.toEntity().copy(sceneVersion = BoardScene.CURRENT_VERSION),
-                EntitySync.now()
+        SyncHooks.local(SyncEntityType.BOARD, existing.syncId) {
+            boardDao.update(
+                EntityWrites.boardForUpdate(
+                    existing,
+                    board.toEntity().copy(sceneVersion = BoardScene.CURRENT_VERSION),
+                    EntitySync.now()
+                )
             )
-        )
+        }
     }
 
     suspend fun rename(id: Int, name: String) {
@@ -86,14 +91,25 @@ class BoardRepository(
     suspend fun delete(board: Board) {
         val now = EntitySync.now()
         val existing = boardDao.getByIdIncludingDeleted(board.id) ?: return
-        boardDao.markDeleted(board.id, now)
-        if (existing.syncId.isNotBlank()) {
-            attachmentDao.markDeletedByParent(AttachmentParentType.BOARD, existing.syncId, now)
-            taskDao.getByBoardSyncIdIncludingDeleted(existing.syncId).forEach { task ->
-                if (task.boardSyncId != null) {
-                    taskDao.update(
-                        EntityWrites.taskForUpdate(task, task.copy(boardSyncId = null), now)
-                    )
+        val linkedTasks = if (existing.syncId.isNotBlank()) {
+            taskDao.getByBoardSyncIdIncludingDeleted(existing.syncId)
+        } else {
+            emptyList()
+        }
+        val items = buildList {
+            add(SyncEntityType.BOARD to existing.syncId)
+            linkedTasks.forEach { add(SyncEntityType.TASK to it.syncId) }
+        }
+        SyncHooks.localMany(items) {
+            boardDao.markDeleted(board.id, now)
+            if (existing.syncId.isNotBlank()) {
+                attachmentDao.markDeletedByParent(AttachmentParentType.BOARD, existing.syncId, now)
+                linkedTasks.forEach { task ->
+                    if (task.boardSyncId != null) {
+                        taskDao.update(
+                            EntityWrites.taskForUpdate(task, task.copy(boardSyncId = null), now)
+                        )
+                    }
                 }
             }
         }
@@ -123,17 +139,18 @@ class BoardRepository(
                 mediaAttachmentSyncId = current.mediaAttachmentSyncId?.let { mediaMap[it] ?: it }
             )
         }
-        val newId = boardDao.insert(
-            EntityWrites.boardForInsert(
-                source.copy(
-                    id = 0,
-                    name = BoardRules.copyName(source.name),
-                    sceneJson = scene.toJson(),
-                    sceneVersion = BoardScene.CURRENT_VERSION
-                ),
-                now
-            )
-        ).toInt()
+        val stamped = EntityWrites.boardForInsert(
+            source.copy(
+                id = 0,
+                name = BoardRules.copyName(source.name),
+                sceneJson = scene.toJson(),
+                sceneVersion = BoardScene.CURRENT_VERSION
+            ),
+            now
+        )
+        val newId = SyncHooks.local(SyncEntityType.BOARD, stamped.syncId) {
+            boardDao.insert(stamped).toInt()
+        }
         val created = boardDao.getByIdOnce(newId) ?: return newId
         copies.forEach { (att, newSync, path) ->
             attachmentDao.insert(

@@ -10,7 +10,7 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV15_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(15))
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(0, payload.counts.teams)
         assertEquals(0, payload.counts.tasks)
         assertEquals(0, payload.counts.trainings)
@@ -23,7 +23,7 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV14_isUpgraded() {
         val payload = BackupValidator.validateJson(validJson(14))
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertEquals(0, payload.counts.players)
         assertTrue(payload.tasks.isEmpty())
         assertTrue(payload.attachments.isEmpty())
@@ -33,7 +33,7 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV16_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(16))
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertTrue(payload.tasks.isEmpty())
         assertTrue(payload.trainings.isEmpty())
     }
@@ -41,7 +41,7 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV17_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(17))
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertTrue(payload.trainings.isEmpty())
         assertTrue(payload.trainingTasks.isEmpty())
         assertTrue(payload.attachments.isEmpty())
@@ -52,7 +52,7 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV18_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(18))
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertTrue(payload.rivalAnalyses.isEmpty())
         assertTrue(payload.rivalLinks.isEmpty())
         assertTrue(payload.opponentPlayers.isEmpty())
@@ -61,7 +61,7 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV19_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(19))
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertTrue(payload.opponentPlayers.isEmpty())
         assertTrue(payload.boards.isEmpty())
     }
@@ -69,7 +69,7 @@ class BackupValidatorTest {
     @Test
     fun validEmptyBackupV20_isAccepted() {
         val payload = BackupValidator.validateJson(validJson(20))
-        assertEquals(20, payload.schemaVersion)
+        assertEquals(21, payload.schemaVersion)
         assertTrue(payload.boards.isEmpty())
         assertEquals(0, payload.counts.boards)
     }
@@ -138,6 +138,9 @@ class BackupValidatorTest {
                 }
                 if (schemaVersion >= 20) {
                     append(",\n              \"boards\": []")
+                }
+                if (schemaVersion >= 21) {
+                    // v21 no añade arrays deportivos (solo outbox local, fuera del ZIP).
                 }
             }
             return """

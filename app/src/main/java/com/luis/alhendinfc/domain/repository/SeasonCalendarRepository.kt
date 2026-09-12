@@ -6,6 +6,8 @@ import com.luis.alhendinfc.data.local.OpponentClubDao
 import com.luis.alhendinfc.data.local.OpponentClubEntity
 import com.luis.alhendinfc.data.local.SeasonFixtureDao
 import com.luis.alhendinfc.data.local.SeasonFixtureEntity
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.SeasonFixture
@@ -60,19 +62,29 @@ class SeasonCalendarRepository(
         val now = EntitySync.now()
         val existing = clubDao.getByTeamAndNameIncludingDeleted(club.teamId, club.name.trim())
         if (existing != null && existing.deletedAt != null) {
-            clubDao.update(EntityWrites.clubForRevive(existing, club.toEntity(), now))
+            SyncHooks.local(SyncEntityType.OPPONENT_CLUB, existing.syncId) {
+                clubDao.update(EntityWrites.clubForRevive(existing, club.toEntity(), now))
+            }
             return existing.id
         }
-        return clubDao.insert(EntityWrites.clubForInsert(club.toEntity(), now)).toInt()
+        val stamped = EntityWrites.clubForInsert(club.toEntity(), now)
+        return SyncHooks.local(SyncEntityType.OPPONENT_CLUB, stamped.syncId) {
+            clubDao.insert(stamped).toInt()
+        }
     }
 
     suspend fun updateClub(club: OpponentClub) {
         val existing = clubDao.getById(club.id) ?: return
-        clubDao.update(EntityWrites.clubForUpdate(existing, club.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.OPPONENT_CLUB, existing.syncId) {
+            clubDao.update(EntityWrites.clubForUpdate(existing, club.toEntity(), EntitySync.now()))
+        }
     }
 
     suspend fun deleteClub(club: OpponentClub) {
-        clubDao.markDeleted(club.id, EntitySync.now())
+        val existing = clubDao.getByIdIncludingDeleted(club.id) ?: clubDao.getById(club.id) ?: return
+        SyncHooks.local(SyncEntityType.OPPONENT_CLUB, existing.syncId) {
+            clubDao.markDeleted(club.id, EntitySync.now())
+        }
     }
 
     suspend fun upsertFixture(fixture: SeasonFixture): Int {
@@ -80,18 +92,28 @@ class SeasonCalendarRepository(
         if (fixture.id <= 0) {
             val tombstone = fixtureDao.getByMatchdayIncludingDeleted(fixture.teamId, fixture.matchday)
             if (tombstone != null && tombstone.deletedAt != null) {
-                fixtureDao.update(EntityWrites.fixtureForRevive(tombstone, fixture.toEntity(), now))
+                SyncHooks.local(SyncEntityType.SEASON_FIXTURE, tombstone.syncId) {
+                    fixtureDao.update(EntityWrites.fixtureForRevive(tombstone, fixture.toEntity(), now))
+                }
                 return tombstone.id
             }
-            return fixtureDao.insert(EntityWrites.fixtureForInsert(fixture.toEntity(), now)).toInt()
+            val stamped = EntityWrites.fixtureForInsert(fixture.toEntity(), now)
+            return SyncHooks.local(SyncEntityType.SEASON_FIXTURE, stamped.syncId) {
+                fixtureDao.insert(stamped).toInt()
+            }
         }
         val existing = fixtureDao.getByIdOnce(fixture.id) ?: return 0
-        fixtureDao.update(EntityWrites.fixtureForUpdate(existing, fixture.toEntity(), now))
+        SyncHooks.local(SyncEntityType.SEASON_FIXTURE, existing.syncId) {
+            fixtureDao.update(EntityWrites.fixtureForUpdate(existing, fixture.toEntity(), now))
+        }
         return existing.id
     }
 
     suspend fun deleteFixture(fixture: SeasonFixture) {
-        fixtureDao.markDeleted(fixture.id, EntitySync.now())
+        val existing = fixtureDao.getByIdOnce(fixture.id) ?: return
+        SyncHooks.local(SyncEntityType.SEASON_FIXTURE, existing.syncId) {
+            fixtureDao.markDeleted(fixture.id, EntitySync.now())
+        }
     }
 
     private fun OpponentClubEntity.toDomain() = OpponentClub(

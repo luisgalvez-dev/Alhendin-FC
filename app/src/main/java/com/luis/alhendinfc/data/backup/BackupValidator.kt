@@ -92,9 +92,9 @@ object BackupValidator {
             throw IllegalArgumentException("El backup no indica schemaVersion")
         }
         val schemaVersion = root.optInt("schemaVersion", -1)
-        if (schemaVersion !in 14..20) {
+        if (schemaVersion !in 14..21) {
             throw IllegalArgumentException(
-                "schemaVersion incompatible: $schemaVersion (se aceptan 14, 15, 16, 17, 18, 19 o 20)"
+                "schemaVersion incompatible: $schemaVersion (se aceptan 14, 15, 16, 17, 18, 19, 20 o 21)"
             )
         }
 
@@ -263,12 +263,13 @@ object BackupValidator {
             counts = parsed
         )
         return when (schemaVersion) {
-            14 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(BackupUpgrade.toV16(BackupUpgrade.toV15(payload))))))
-            15 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(BackupUpgrade.toV16(payload)))))
-            16 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(payload))))
-            17 -> BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(payload)))
-            18 -> BackupUpgrade.toV20(BackupUpgrade.toV19(payload))
-            19 -> BackupUpgrade.toV20(payload)
+            14 -> BackupUpgrade.toV21(BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(BackupUpgrade.toV16(BackupUpgrade.toV15(payload)))))))
+            15 -> BackupUpgrade.toV21(BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(BackupUpgrade.toV16(payload))))))
+            16 -> BackupUpgrade.toV21(BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(BackupUpgrade.toV17(payload)))))
+            17 -> BackupUpgrade.toV21(BackupUpgrade.toV20(BackupUpgrade.toV19(BackupUpgrade.toV18(payload))))
+            18 -> BackupUpgrade.toV21(BackupUpgrade.toV20(BackupUpgrade.toV19(payload)))
+            19 -> BackupUpgrade.toV21(BackupUpgrade.toV20(payload))
+            20 -> BackupUpgrade.toV21(payload)
             else -> payload
         }
     }

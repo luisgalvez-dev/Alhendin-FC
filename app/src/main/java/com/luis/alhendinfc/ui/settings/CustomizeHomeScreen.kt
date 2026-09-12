@@ -162,7 +162,15 @@ private fun CustomizeHomeRow(
                     tint = if (canMoveDown) GreenAccent else Color.White.copy(alpha = 0.25f)
                 )
             }
-            Switch(checked = preference.enabled, onCheckedChange = onToggle)
+            if (module == HomeModule.SETTINGS) {
+                Text(
+                    "Siempre visible",
+                    color = GreenMint,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            } else {
+                Switch(checked = preference.enabled, onCheckedChange = onToggle)
+            }
         }
     }
 }

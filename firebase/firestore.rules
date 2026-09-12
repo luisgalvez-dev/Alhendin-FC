@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isMember(workspaceId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read, write: if isSelf(uid);
+      match /preferences/{docId} {
+        allow read, write: if isSelf(uid);
+      }
+    }
+
+    match /workspaces/{workspaceId} {
+      allow read: if isMember(workspaceId);
+      allow create, update: if isMember(workspaceId);
+      allow delete: if false;
+
+      match /members/{uid} {
+        allow read: if isMember(workspaceId) || (signedIn() && request.auth.uid == uid);
+        allow write: if false;
+      }
+
+      match /{collection}/{docId} {
+        allow read, write: if isMember(workspaceId)
+          && collection in [
+            'teams', 'players', 'opponentClubs', 'opponentPlayers',
+            'rivalAnalyses', 'rivalLinks', 'seasonFixtures',
+            'matches', 'matchPlayers', 'matchEvents',
+            'customStatTypes', 'tasks', 'trainings', 'trainingTasks', 'boards'
+          ];
+      }
+    }
+  }
+}

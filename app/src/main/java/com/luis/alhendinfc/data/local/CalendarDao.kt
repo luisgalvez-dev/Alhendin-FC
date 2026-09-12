@@ -36,6 +36,9 @@ interface OpponentClubDao {
     @Query("SELECT * FROM opponent_club ORDER BY id ASC")
     suspend fun getAllOnce(): List<OpponentClubEntity>
 
+    @Query("SELECT * FROM opponent_club WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): OpponentClubEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(entities: List<OpponentClubEntity>)
 
@@ -86,6 +89,9 @@ interface SeasonFixtureDao {
     /** Incluye tombstones. Uso interno / backup / futura sync. */
     @Query("SELECT * FROM season_fixture ORDER BY id ASC")
     suspend fun getAllOnce(): List<SeasonFixtureEntity>
+
+    @Query("SELECT * FROM season_fixture WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): SeasonFixtureEntity?
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(entities: List<SeasonFixtureEntity>)

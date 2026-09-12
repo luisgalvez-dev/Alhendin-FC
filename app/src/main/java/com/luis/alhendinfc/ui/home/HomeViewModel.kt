@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
@@ -29,6 +30,10 @@ class HomeViewModel(
     private val calendarRepository: SeasonCalendarRepository,
     private val matchRepository: MatchRepositoryImpl
 ) : ViewModel() {
+
+    init {
+        viewModelScope.launch { preferences.migrateToDeviceLayoutIfNeeded() }
+    }
 
     private val teamIdFlow = MutableStateFlow<Int?>(null)
 

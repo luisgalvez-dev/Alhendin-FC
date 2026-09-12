@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "994927257041",
+    "project_id": "alhendinfc",
+    "storage_bucket": "alhendinfc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:994927257041:android:f62403608238e55d21acf0",
+        "android_client_info": {
+          "package_name": "com.luis.alhendinfc.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDkfV_eZItuytcIG_HxTjml3RtdVJZw3oc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

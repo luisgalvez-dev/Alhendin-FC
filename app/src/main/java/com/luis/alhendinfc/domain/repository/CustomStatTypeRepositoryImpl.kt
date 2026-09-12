@@ -4,6 +4,8 @@ import com.luis.alhendinfc.data.local.CustomStatTypeDao
 import com.luis.alhendinfc.data.local.CustomStatTypeEntity
 import com.luis.alhendinfc.data.local.EntitySync
 import com.luis.alhendinfc.data.local.EntityWrites
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.CustomStatAppliesTo
 import com.luis.alhendinfc.domain.model.CustomStatType
 import kotlinx.coroutines.flow.Flow
@@ -26,30 +28,42 @@ class CustomStatTypeRepositoryImpl(
         val incoming = type.copy(code = code)
         val existing = dao.getByTeamAndCodeIncludingDeleted(type.teamId, code)
         if (existing != null && existing.deletedAt != null) {
-            dao.update(EntityWrites.statForRevive(existing, incoming.toEntity(), now))
+            SyncHooks.local(SyncEntityType.CUSTOM_STAT, existing.syncId) {
+                dao.update(EntityWrites.statForRevive(existing, incoming.toEntity(), now))
+            }
             return existing.id
         }
-        return dao.insert(EntityWrites.statForInsert(incoming.toEntity(), now)).toInt()
+        val stamped = EntityWrites.statForInsert(incoming.toEntity(), now)
+        return SyncHooks.local(SyncEntityType.CUSTOM_STAT, stamped.syncId) {
+            dao.insert(stamped).toInt()
+        }
     }
 
     override suspend fun update(type: CustomStatType) {
         val existing = dao.getById(type.id) ?: return
-        dao.update(EntityWrites.statForUpdate(existing, type.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.CUSTOM_STAT, existing.syncId) {
+            dao.update(EntityWrites.statForUpdate(existing, type.toEntity(), EntitySync.now()))
+        }
     }
 
     override suspend fun deleteOrDeactivate(type: CustomStatType) {
         val used = dao.countEventsWithCode(type.code, type.teamId)
         if (used > 0) {
             val existing = dao.getById(type.id) ?: return
-            dao.update(
-                EntityWrites.statForUpdate(
-                    existing,
-                    type.copy(isActive = false).toEntity(),
-                    EntitySync.now()
+            SyncHooks.local(SyncEntityType.CUSTOM_STAT, existing.syncId) {
+                dao.update(
+                    EntityWrites.statForUpdate(
+                        existing,
+                        type.copy(isActive = false).toEntity(),
+                        EntitySync.now()
+                    )
                 )
-            )
+            }
         } else {
-            dao.markDeleted(type.id, EntitySync.now())
+            val existing = dao.getById(type.id) ?: return
+            SyncHooks.local(SyncEntityType.CUSTOM_STAT, existing.syncId) {
+                dao.markDeleted(type.id, EntitySync.now())
+            }
         }
     }
 

@@ -40,6 +40,9 @@ interface TrainingDao {
     @Query("SELECT * FROM training ORDER BY id ASC")
     suspend fun getAllOnce(): List<TrainingEntity>
 
+    @Query("SELECT * FROM training WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): TrainingEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: TrainingEntity): Long
 

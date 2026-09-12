@@ -8,8 +8,8 @@ package com.luis.alhendinfc.data.sync
  * y más adelante Task/Training/Board/Attachment/RivalAnalysis.
  *
  * Personal / local:
- * - DataStore `home_prefs` (orden y visibilidad del Inicio). El Inicio por usuario
- *   llega tras Auth; hasta entonces es por instalación.
+ * - DataStore `home_prefs` del dispositivo (`home_layout`). No se lee ni escribe
+ *   `users/{uid}/preferences/homeLayout` en cloud.
  * - [com.luis.alhendinfc.data.local.TeamEntity.isSelected]
  * - estado LIVE de partido (ver [MatchLiveLocalState])
  */

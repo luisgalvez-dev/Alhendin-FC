@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -71,6 +72,7 @@ fun TaskEditDialog(
     var pendingImage by remember { mutableStateOf<Uri?>(null) }
     var removeImage by remember { mutableStateOf(false) }
     var viewingSource by remember { mutableStateOf<String?>(null) }
+    var selectedBoardSyncId by remember { mutableStateOf(current?.boardSyncId) }
     val context = LocalContext.current
     val previewPath = when {
         pendingImage != null -> pendingImage.toString()
@@ -180,24 +182,51 @@ fun TaskEditDialog(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text("Pizarra", fontWeight = FontWeight.Medium)
-                val linked = boards.firstOrNull { it.syncId == current?.boardSyncId && it.syncId.isNotBlank() }
+                val linked = boards.firstOrNull { it.syncId == selectedBoardSyncId && it.syncId.isNotBlank() }
                 if (current == null || current.id <= 0) {
                     Text("Guarda la tarea para asociar una pizarra.", color = GreenMint)
-                } else if (linked == null) {
-                    Text("Sin pizarra asociada", color = GreenMint)
+                } else {
+                    if (linked != null) {
+                        Text(linked.name, fontWeight = FontWeight.SemiBold)
+                        TextButton(onClick = { onOpenBoard(linked) }) { Text("Abrir pizarra") }
+                        TextButton(onClick = {
+                            selectedBoardSyncId = null
+                            onClearBoard(current)
+                        }) { Text("Quitar asociación") }
+                    } else {
+                        Text("Sin pizarra asociada", color = GreenMint)
+                    }
                     TextButton(onClick = { onCreateBoard(current) }) { Text("Crear pizarra") }
                     if (boards.isNotEmpty()) {
                         Text("Elegir pizarra existente", color = GreenMint)
                         boards.forEach { board ->
-                            TextButton(onClick = { onAssignBoard(current, board) }) { Text(board.name) }
+                            val selected = board.syncId.isNotBlank() && board.syncId == selectedBoardSyncId
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        if (selected) Color(0xFF1F6B35) else Color(0xFF1A3A22)
+                                    )
+                                    .clickable {
+                                        selectedBoardSyncId = board.syncId
+                                        onAssignBoard(current, board)
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    board.name,
+                                    color = Color.White,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (selected) {
+                                    Text("Seleccionada", color = GreenMint, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
                         }
-                    }
-                } else {
-                    Text(linked.name, fontWeight = FontWeight.SemiBold)
-                    TextButton(onClick = { onOpenBoard(linked) }) { Text("Abrir pizarra") }
-                    TextButton(onClick = { onClearBoard(current) }) { Text("Quitar asociación") }
-                    boards.filter { it.id != linked.id }.forEach { board ->
-                        TextButton(onClick = { onAssignBoard(current, board) }) { Text("Cambiar a ${board.name}") }
                     }
                 }
                 if (error != null) {
@@ -225,7 +254,7 @@ fun TaskEditDialog(
                             playerCount = playerCount,
                             durationMinutes = durationMinutes,
                             description = description.trim(),
-                            boardSyncId = current?.boardSyncId,
+                            boardSyncId = selectedBoardSyncId,
                             syncId = current?.syncId.orEmpty(),
                             createdAt = current?.createdAt ?: 0L,
                             updatedAt = current?.updatedAt ?: 0L,

@@ -39,6 +39,9 @@ interface OpponentPlayerDao {
     @Query("SELECT * FROM opponent_player ORDER BY id ASC")
     suspend fun getAllOnce(): List<OpponentPlayerEntity>
 
+    @Query("SELECT * FROM opponent_player WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): OpponentPlayerEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: OpponentPlayerEntity): Long
 

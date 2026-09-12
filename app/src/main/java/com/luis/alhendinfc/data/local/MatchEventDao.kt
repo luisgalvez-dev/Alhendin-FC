@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -32,6 +33,18 @@ interface MatchEventDao {
     /** Incluye tombstones. Uso interno / backup / futura sync. */
     @Query("SELECT * FROM match_event ORDER BY id ASC")
     suspend fun getAllOnce(): List<MatchEventEntity>
+
+    @Query("SELECT * FROM match_event WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): MatchEventEntity?
+
+    @Query("SELECT * FROM match_event WHERE id = :id LIMIT 1")
+    suspend fun getByIdIncludingDeleted(id: Int): MatchEventEntity?
+
+    @Query("SELECT * FROM match_event WHERE matchId = :matchId")
+    suspend fun getByMatchIncludingDeleted(matchId: Int): List<MatchEventEntity>
+
+    @Update
+    suspend fun update(entity: MatchEventEntity)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(events: List<MatchEventEntity>)

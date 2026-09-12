@@ -8,6 +8,8 @@ import com.luis.alhendinfc.data.local.RivalAnalysisDao
 import com.luis.alhendinfc.data.local.RivalAnalysisEntity
 import com.luis.alhendinfc.data.local.RivalLinkDao
 import com.luis.alhendinfc.data.local.RivalLinkEntity
+import com.luis.alhendinfc.data.sync.SyncEntityType
+import com.luis.alhendinfc.data.sync.SyncHooks
 import com.luis.alhendinfc.domain.model.OpponentPlayer
 import com.luis.alhendinfc.domain.model.OpponentPlayerRules
 import com.luis.alhendinfc.domain.model.RivalAnalysis
@@ -34,14 +36,22 @@ class RivalRepository(
             } else {
                 EntityWrites.rivalAnalysisForUpdate(existing, analysis.toEntity(), now)
             }
-            analysisDao.update(updated)
+            SyncHooks.local(SyncEntityType.RIVAL_ANALYSIS, existing.syncId) {
+                analysisDao.update(updated)
+            }
             return existing.id
         }
-        return analysisDao.insert(EntityWrites.rivalAnalysisForInsert(analysis.toEntity(), now)).toInt()
+        val stamped = EntityWrites.rivalAnalysisForInsert(analysis.toEntity(), now)
+        return SyncHooks.local(SyncEntityType.RIVAL_ANALYSIS, stamped.syncId) {
+            analysisDao.insert(stamped).toInt()
+        }
     }
 
     suspend fun deleteAnalysis(analysis: RivalAnalysis) {
-        analysisDao.markDeleted(analysis.id, EntitySync.now())
+        val existing = analysisDao.getByIdIncludingDeleted(analysis.id) ?: return
+        SyncHooks.local(SyncEntityType.RIVAL_ANALYSIS, existing.syncId) {
+            analysisDao.markDeleted(analysis.id, EntitySync.now())
+        }
     }
 
     fun getLinks(opponentClubId: Int): Flow<List<RivalLink>> =
@@ -51,19 +61,25 @@ class RivalRepository(
         require(RivalLinkRules.isKnownType(link.type)) { "Tipo de enlace no soportado" }
         val now = EntitySync.now()
         val nextOrder = (linkDao.getActiveByClubOnce(link.opponentClubId).maxOfOrNull { it.sortOrder } ?: -1) + 1
-        return linkDao.insert(
-            EntityWrites.rivalLinkForInsert(link.toEntity().copy(sortOrder = nextOrder), now)
-        ).toInt()
+        val stamped = EntityWrites.rivalLinkForInsert(link.toEntity().copy(sortOrder = nextOrder), now)
+        return SyncHooks.local(SyncEntityType.RIVAL_LINK, stamped.syncId) {
+            linkDao.insert(stamped).toInt()
+        }
     }
 
     suspend fun updateLink(link: RivalLink) {
         require(RivalLinkRules.isKnownType(link.type)) { "Tipo de enlace no soportado" }
         val existing = linkDao.getByIdOnce(link.id) ?: return
-        linkDao.update(EntityWrites.rivalLinkForUpdate(existing, link.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.RIVAL_LINK, existing.syncId) {
+            linkDao.update(EntityWrites.rivalLinkForUpdate(existing, link.toEntity(), EntitySync.now()))
+        }
     }
 
     suspend fun deleteLink(link: RivalLink) {
-        linkDao.markDeleted(link.id, EntitySync.now())
+        val existing = linkDao.getByIdIncludingDeleted(link.id) ?: linkDao.getByIdOnce(link.id) ?: return
+        SyncHooks.local(SyncEntityType.RIVAL_LINK, existing.syncId) {
+            linkDao.markDeleted(link.id, EntitySync.now())
+        }
     }
 
     suspend fun moveLink(opponentClubId: Int, linkId: Int, up: Boolean) {
@@ -75,8 +91,15 @@ class RivalRepository(
         val now = EntitySync.now()
         val a = rows[index]
         val b = rows[swapWith]
-        linkDao.update(a.copy(sortOrder = b.sortOrder, updatedAt = now))
-        linkDao.update(b.copy(sortOrder = a.sortOrder, updatedAt = now))
+        SyncHooks.localMany(
+            listOf(
+                SyncEntityType.RIVAL_LINK to a.syncId,
+                SyncEntityType.RIVAL_LINK to b.syncId
+            )
+        ) {
+            linkDao.update(a.copy(sortOrder = b.sortOrder, updatedAt = now))
+            linkDao.update(b.copy(sortOrder = a.sortOrder, updatedAt = now))
+        }
     }
 
     fun getPlayers(opponentClubId: Int): Flow<List<OpponentPlayer>> =
@@ -91,20 +114,26 @@ class RivalRepository(
     suspend fun addPlayer(player: OpponentPlayer): Int {
         val error = OpponentPlayerRules.validate(player.name)
         require(error == null) { error!! }
-        return playerDao.insert(
-            EntityWrites.opponentPlayerForInsert(player.toEntity(), EntitySync.now())
-        ).toInt()
+        val stamped = EntityWrites.opponentPlayerForInsert(player.toEntity(), EntitySync.now())
+        return SyncHooks.local(SyncEntityType.OPPONENT_PLAYER, stamped.syncId) {
+            playerDao.insert(stamped).toInt()
+        }
     }
 
     suspend fun updatePlayer(player: OpponentPlayer) {
         val error = OpponentPlayerRules.validate(player.name)
         require(error == null) { error!! }
         val existing = playerDao.getByIdOnce(player.id) ?: return
-        playerDao.update(EntityWrites.opponentPlayerForUpdate(existing, player.toEntity(), EntitySync.now()))
+        SyncHooks.local(SyncEntityType.OPPONENT_PLAYER, existing.syncId) {
+            playerDao.update(EntityWrites.opponentPlayerForUpdate(existing, player.toEntity(), EntitySync.now()))
+        }
     }
 
     suspend fun deletePlayer(player: OpponentPlayer) {
-        playerDao.markDeleted(player.id, EntitySync.now())
+        val existing = playerDao.getByIdIncludingDeleted(player.id) ?: playerDao.getByIdOnce(player.id) ?: return
+        SyncHooks.local(SyncEntityType.OPPONENT_PLAYER, existing.syncId) {
+            playerDao.markDeleted(player.id, EntitySync.now())
+        }
     }
 
     private fun RivalAnalysisEntity.toDomain() = RivalAnalysis(

@@ -43,6 +43,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -122,7 +124,8 @@ fun PizarraScreen(
     onPendingText: (String?) -> Unit,
     onDeleteSelected: () -> Unit,
     onUpdateNumber: (String) -> Unit,
-    onUpdateText: (String) -> Unit
+    onUpdateText: (String) -> Unit,
+    onSavedConsumed: () -> Unit = {}
 ) {
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -136,6 +139,13 @@ fun PizarraScreen(
     var textValue by remember { mutableStateOf("") }
     var editingToken by remember { mutableStateOf(false) }
     var tokenValue by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.saved) {
+        if (state.saved) {
+            snackbarHostState.showSnackbar("Pizarra guardada")
+            onSavedConsumed()
+        }
+    }
 
     if (askingText) {
         AlertDialog(
@@ -202,6 +212,7 @@ fun PizarraScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color(0xFF061408)
     ) { padding ->
         Row(

@@ -90,7 +90,8 @@ fun HomeScreen(
     onNavigateToLive: (matchId: Int) -> Unit,
     onNavigateToNextMatch: () -> Unit,
     onAddTeam: (Team) -> Unit,
-    onSelectTeam: (Int) -> Unit
+    onSelectTeam: (Int) -> Unit,
+    connectionLabel: String? = null
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     val hasTeam = selectedTeam != null
@@ -137,6 +138,15 @@ fun HomeScreen(
                 onSelectTeam = onSelectTeam,
                 onAddTeam = { showAddDialog = true }
             )
+
+            if (!connectionLabel.isNullOrBlank()) {
+                Text(
+                    connectionLabel,
+                    color = AmberAccent,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

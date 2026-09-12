@@ -68,4 +68,13 @@ class HomeLayoutCompatTest {
         assertEquals(calendarIndex + 1, tasksIndex)
         assertEquals(tasksIndex + 1, rivalsIndex)
     }
+
+    @Test
+    fun settingsCannotBeDisabledInDecode() {
+        val raw = "team:1,matches:1,calendar:1,tasks:1,rivals:1,pizarra:1,statistics:1,settings:0,next_match:1,live_match:1"
+        val config = HomePreferencesRepository.decode(raw)
+        val settings = config.modules.first { it.module == HomeModule.SETTINGS }
+        assertTrue(settings.enabled)
+        assertTrue(config.visibleOrdered.contains(HomeModule.SETTINGS))
+    }
 }

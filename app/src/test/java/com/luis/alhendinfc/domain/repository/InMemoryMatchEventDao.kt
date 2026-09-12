@@ -27,6 +27,23 @@ internal class InMemoryMatchEventDao : MatchEventDao {
 
     override suspend fun getAllOnce(): List<MatchEventEntity> = rows.sortedBy { it.id }
 
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): MatchEventEntity? =
+        rows.firstOrNull { it.syncId == syncId }
+
+    override suspend fun getByIdIncludingDeleted(id: Int): MatchEventEntity? =
+        rows.firstOrNull { it.id == id }
+
+    override suspend fun getByMatchIncludingDeleted(matchId: Int): List<MatchEventEntity> =
+        rows.filter { it.matchId == matchId }
+
+    override suspend fun update(entity: MatchEventEntity) {
+        val index = rows.indexOfFirst { it.id == entity.id }
+        if (index >= 0) {
+            rows[index] = entity
+            publish()
+        }
+    }
+
     override suspend fun insertAll(events: List<MatchEventEntity>) {
         events.forEach { insert(it) }
     }
