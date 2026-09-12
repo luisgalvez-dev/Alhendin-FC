@@ -163,4 +163,27 @@ class CloudMappingTest {
         assertNull(doc.data["remotePath"])
         assertFalse(doc.data.containsKey("localPath"))
     }
+
+    @Test
+    fun rivalLinkCloud_keepsTypeAndUrl() {
+        val row = com.luis.alhendinfc.data.local.RivalLinkEntity(
+            id = 9,
+            syncId = "lk-yt-1",
+            opponentClubId = 4,
+            type = "YOUTUBE",
+            label = "YouTube",
+            url = "https://example.com/dev/youtube",
+            sortOrder = 0,
+            createdAt = 1L,
+            updatedAt = 2L
+        )
+        val doc = CloudMappers.rivalLink(row, "club-sync")
+        assertEquals("lk-yt-1", doc.id)
+        assertEquals("club-sync", doc.data["opponentClubSyncId"])
+        assertEquals("YOUTUBE", doc.data["type"])
+        assertEquals("https://example.com/dev/youtube", doc.data["url"])
+        assertFalse(doc.data.containsKey("opponentClubId"))
+        assertFalse(doc.data.containsKey("id"))
+        CloudMappers.assertNoIntIdentity(doc.data)
+    }
 }

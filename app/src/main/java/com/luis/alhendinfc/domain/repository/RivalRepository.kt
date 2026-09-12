@@ -59,19 +59,22 @@ class RivalRepository(
 
     suspend fun addLink(link: RivalLink): Int {
         require(RivalLinkRules.isKnownType(link.type)) { "Tipo de enlace no soportado" }
-        val now = EntitySync.now()
-        val nextOrder = (linkDao.getActiveByClubOnce(link.opponentClubId).maxOfOrNull { it.sortOrder } ?: -1) + 1
-        val stamped = EntityWrites.rivalLinkForInsert(link.toEntity().copy(sortOrder = nextOrder), now)
-        return SyncHooks.local(SyncEntityType.RIVAL_LINK, stamped.syncId) {
-            linkDao.insert(stamped).toInt()
-        }
+        val url = RivalLinkRules.requireNormalizedUrl(link.url)
+        return insertLink(link.copy(url = url, label = link.label.trim()))
     }
 
     suspend fun updateLink(link: RivalLink) {
         require(RivalLinkRules.isKnownType(link.type)) { "Tipo de enlace no soportado" }
+        val url = RivalLinkRules.requireNormalizedUrl(link.url)
         val existing = linkDao.getByIdOnce(link.id) ?: return
         SyncHooks.local(SyncEntityType.RIVAL_LINK, existing.syncId) {
-            linkDao.update(EntityWrites.rivalLinkForUpdate(existing, link.toEntity(), EntitySync.now()))
+            linkDao.update(
+                EntityWrites.rivalLinkForUpdate(
+                    existing,
+                    link.copy(url = url, label = link.label.trim()).toEntity(),
+                    EntitySync.now()
+                )
+            )
         }
     }
 
@@ -133,6 +136,15 @@ class RivalRepository(
         val existing = playerDao.getByIdIncludingDeleted(player.id) ?: playerDao.getByIdOnce(player.id) ?: return
         SyncHooks.local(SyncEntityType.OPPONENT_PLAYER, existing.syncId) {
             playerDao.markDeleted(player.id, EntitySync.now())
+        }
+    }
+
+    private suspend fun insertLink(link: RivalLink): Int {
+        val now = EntitySync.now()
+        val nextOrder = (linkDao.getActiveByClubOnce(link.opponentClubId).maxOfOrNull { it.sortOrder } ?: -1) + 1
+        val stamped = EntityWrites.rivalLinkForInsert(link.toEntity().copy(sortOrder = nextOrder), now)
+        return SyncHooks.local(SyncEntityType.RIVAL_LINK, stamped.syncId) {
+            linkDao.insert(stamped).toInt()
         }
     }
 

@@ -133,6 +133,9 @@ class DevSeedDataTest {
         assertTrue(analysisB != null && analysisB.deletedAt == null)
         assertEquals(2, h.stores.linkDao.getAllOnce().count { it.opponentClubId == rivalA.id })
         assertEquals(2, h.stores.linkDao.getAllOnce().count { it.opponentClubId == rivalB.id })
+        assertTrue(
+            h.stores.linkDao.getAllOnce().none { it.type == "PLAY_RFAF" }
+        )
         assertEquals(6, h.stores.playerDao.getAllOnce().count { it.opponentClubId == rivalA.id })
         assertEquals(5, h.stores.playerDao.getAllOnce().count { it.opponentClubId == rivalB.id })
 

@@ -20,6 +20,7 @@ object RivalLinkType {
     const val CUSTOM = "CUSTOM"
 
     val ALL = listOf(RFAF, RFAF_TV, YOUTUBE, CUSTOM)
+    val GENERIC = ALL
 
     fun labelOf(type: String): String = when (type) {
         RFAF -> "RFAF"
@@ -37,6 +38,16 @@ object RivalLinkRules {
         val scheme = uri.scheme?.lowercase() ?: return false
         if (scheme != "http" && scheme != "https") return false
         return !uri.host.isNullOrBlank()
+    }
+
+    fun normalizeUrl(url: String): String = url.trim()
+
+    fun requireNormalizedUrl(url: String): String {
+        val normalized = normalizeUrl(url)
+        require(isOpenableUrl(normalized)) {
+            "La URL debe empezar por http:// o https://"
+        }
+        return normalized
     }
 
     fun isKnownType(type: String): Boolean = type in RivalLinkType.ALL

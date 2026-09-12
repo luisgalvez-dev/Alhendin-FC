@@ -120,6 +120,24 @@ class RivalRepositoryTest {
     }
 
     @Test
+    fun playRfaf_isNotAConfigurableRivalLink() = runTest {
+        val h = harness()
+        val clubId = h.clubs.addClub(OpponentClub(teamId = 1, name = "Rival"))
+        val error = runCatching {
+            h.rivals.addLink(
+                RivalLink(
+                    opponentClubId = clubId,
+                    type = "PLAY_RFAF",
+                    label = "PlayRFAF",
+                    url = "https://www.footballclub.pro/main-fc"
+                )
+            )
+        }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(h.rivals.getLinks(clubId).first().isEmpty())
+    }
+
+    @Test
     fun opponentAttachments_severalAndTombstone() = runTest {
         val h = harness()
         val clubId = h.clubs.addClub(OpponentClub(teamId = 1, name = "Rival"))

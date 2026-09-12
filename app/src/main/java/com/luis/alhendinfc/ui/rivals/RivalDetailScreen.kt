@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,15 +15,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -61,6 +66,7 @@ import com.luis.alhendinfc.domain.model.MatchReportRef
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.OpponentPlayer
 import com.luis.alhendinfc.domain.model.OpponentPlayerRules
+import com.luis.alhendinfc.domain.model.PlayRfaf
 import com.luis.alhendinfc.domain.model.RivalAnalysis
 import com.luis.alhendinfc.domain.model.RivalLink
 import com.luis.alhendinfc.domain.model.RivalLinkRules
@@ -71,6 +77,7 @@ import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.util.ImageViewer
 import com.luis.alhendinfc.ui.util.openOrDownloadAttachment
+import com.luis.alhendinfc.ui.util.openWebUrl
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,11 +194,17 @@ fun RivalDetailScreen(
                     onViewImage = { viewingPath = it }
                 )
                 else -> LinksTab(
+                    rivalName = club?.name.orEmpty(),
                     links = links,
                     onAdd = onAddLink,
                     onUpdate = onUpdateLink,
                     onDelete = onDeleteLink,
-                    onMove = onMoveLink
+                    onMove = onMoveLink,
+                    onOpenFailed = {
+                        scope.launch {
+                            snackbarHostState.showSnackbar("No hay ninguna aplicación para abrir este enlace.")
+                        }
+                    }
                 )
             }
         }
@@ -569,11 +582,13 @@ private fun FilesTab(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LinksTab(
+    rivalName: String,
     links: List<RivalLink>,
     onAdd: (type: String, label: String, url: String) -> Unit,
     onUpdate: (RivalLink) -> Unit,
     onDelete: (RivalLink) -> Unit,
-    onMove: (linkId: Int, up: Boolean) -> Unit
+    onMove: (linkId: Int, up: Boolean) -> Unit,
+    onOpenFailed: () -> Unit
 ) {
     val context = LocalContext.current
     var creating by remember { mutableStateOf(false) }
@@ -607,10 +622,46 @@ private fun LinksTab(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Text("ENLACES", color = GreenMint, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A3A22)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    if (!openWebUrl(context, PlayRfaf.URL)) onOpenFailed()
+                }
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = AmberAccent,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Ver partidos en PlayRFAF", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        PlayRfaf.searchHint(rivalName),
+                        color = GreenMint,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        if (!openWebUrl(context, PlayRfaf.URL)) onOpenFailed()
+                    }
+                ) { Text("Abrir PlayRFAF") }
+            }
+        }
         if (links.isEmpty()) {
-            Text("Sin enlaces. Añade RFAF, YouTube u otros de prueba.", color = AmberAccent)
+            Text("Sin otros enlaces. Añade RFAF, YouTube u otros de prueba.", color = Color.White.copy(alpha = 0.7f))
         }
         links.forEachIndexed { index, link ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -621,13 +672,10 @@ private fun LinksTab(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(RivalLinkType.labelOf(link.type), color = GreenMint, style = MaterialTheme.typography.labelSmall)
-                    Text(link.url, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
                 TextButton(
                     onClick = {
-                        if (RivalLinkRules.isOpenableUrl(link.url)) {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url.trim())))
-                        }
+                        if (!openWebUrl(context, link.url)) onOpenFailed()
                     },
                     enabled = RivalLinkRules.isOpenableUrl(link.url)
                 ) { Text("Abrir") }
@@ -643,7 +691,7 @@ private fun LinksTab(
                 }
             }
         }
-        TextButton(onClick = { creating = true }) { Text("Añadir enlace") }
+        TextButton(onClick = { creating = true }) { Text("Añadir otro enlace") }
     }
 }
 
@@ -676,7 +724,7 @@ private fun LinkEditorDialog(
                             .fillMaxWidth()
                     )
                     ExposedDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        RivalLinkType.ALL.forEach { option ->
+                        RivalLinkType.GENERIC.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(RivalLinkType.labelOf(option)) },
                                 onClick = {
