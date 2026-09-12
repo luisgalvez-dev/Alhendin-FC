@@ -16,6 +16,7 @@ object SyncEntityType {
     const val TRAINING = "trainings"
     const val TRAINING_TASK = "trainingTasks"
     const val BOARD = "boards"
+    const val ATTACHMENT = "attachments"
 
     val DOWNLOAD_ORDER = listOf(
         TEAM,
@@ -32,6 +33,7 @@ object SyncEntityType {
         TRAINING_TASK,
         RIVAL_ANALYSIS,
         RIVAL_LINK,
-        OPPONENT_PLAYER
+        OPPONENT_PLAYER,
+        ATTACHMENT
     )
 }

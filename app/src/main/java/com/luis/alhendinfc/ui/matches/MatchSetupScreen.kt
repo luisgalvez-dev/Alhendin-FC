@@ -100,7 +100,7 @@ import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.theme.GreenPitch
 import com.luis.alhendinfc.ui.util.ImageViewer
-import com.luis.alhendinfc.ui.util.openAttachment
+import com.luis.alhendinfc.ui.util.openOrDownloadAttachment
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
@@ -274,8 +274,8 @@ fun MatchSetupScreen(
         )
     }
 
-    viewingReport?.let { att ->
-        ImageViewer(source = att.localPath, title = att.name.ifBlank { "Informe" }) {
+    viewingReport?.localPath?.takeIf { it.isNotBlank() }?.let { path ->
+        ImageViewer(source = path, title = viewingReport?.name?.ifBlank { "Informe" } ?: "Informe") {
             viewingReport = null
         }
     }
@@ -687,7 +687,7 @@ fun MatchSetupScreen(
                         )
                     },
                     onOpen = { att ->
-                        if (att.isImage) viewingReport = att else openAttachment(context, att)
+                        openOrDownloadAttachment(context, att) { viewingReport = att }
                     },
                     onDelete = onDeleteReport
                 )
@@ -1025,7 +1025,7 @@ private fun MatchReportsSection(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
         Text("Informes", color = GreenMint, fontWeight = FontWeight.SemiBold)
         Text(
-            "Adjuntos de este partido: un PDF, una foto o un documento que te pasen (acta federativa, foto de pizarra, etc.). El análisis del rival se escribe en Rivales, no aquí. Los informes se guardan en este dispositivo hasta que haya Storage.",
+            "Adjuntos de este partido: un PDF, una foto o un documento que te pasen (acta federativa, foto de pizarra, etc.). El análisis del rival se escribe en Rivales, no aquí. Un solo archivo; también se ve en la ficha del rival.",
             color = Color.White.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall
         )
@@ -1039,6 +1039,7 @@ private fun MatchReportsSection(
                         Text(att.name.ifBlank { att.mimeType }, color = Color.White)
                         val meta = listOfNotNull(
                             att.typeLabel,
+                            att.transferHint,
                             formatReportDate(att.createdAt).takeIf { it.isNotBlank() }
                         ).joinToString(" · ")
                         if (meta.isNotBlank()) {

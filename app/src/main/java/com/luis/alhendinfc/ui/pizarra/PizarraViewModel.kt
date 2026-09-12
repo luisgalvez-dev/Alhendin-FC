@@ -87,7 +87,8 @@ data class PizarraUiState(
     val selectedObjectId: String? = null,
     val isVideoPlaying: Boolean = false,
     val videoSeekPulse: VideoSeekPulse? = null,
-    val pendingText: String? = null
+    val pendingText: String? = null,
+    val mediaError: String? = null
 )
 
 data class VideoSeekPulse(val deltaMs: Long, val id: Long = System.nanoTime())
@@ -112,6 +113,7 @@ class PizarraViewModel(
 
     init {
         viewModelScope.launch { load() }
+        viewModelScope.launch { observeBoardMedia() }
     }
 
     private suspend fun load() {
@@ -140,10 +142,24 @@ class PizarraViewModel(
         }
     }
 
+    private suspend fun observeBoardMedia() {
+        if (boardId <= 0) return
+        val board = boards.getOnce(boardId) ?: return
+        val sceneSyncId = BoardScene.fromJson(board.sceneJson).mediaAttachmentSyncId
+        attachments.getActiveByParent(AttachmentParentType.BOARD, board.syncId).collect { list ->
+            val syncId = mediaAttachmentSyncId ?: sceneSyncId ?: return@collect
+            val path = list.firstOrNull { it.syncId == syncId }?.localPath
+            if (!path.isNullOrBlank()) {
+                _uiState.update { it.copy(mediaUri = Uri.fromFile(File(path))) }
+            }
+        }
+    }
+
     private suspend fun resolveMediaUri(scene: BoardScene): Uri? {
         val syncId = scene.mediaAttachmentSyncId ?: return null
         val items = attachments.getActiveByParent(AttachmentParentType.BOARD, loadedSyncId).first()
         val path = items.firstOrNull { it.syncId == syncId }?.localPath ?: return null
+        if (path.isBlank()) return null
         return Uri.fromFile(File(path))
     }
 
@@ -189,25 +205,29 @@ class PizarraViewModel(
             val board = currentBoard() ?: return@launch
             val attachmentSync = UUID.randomUUID().toString()
             val name = fileStore.queryDisplayName(uri) ?: if (isVideo) "video" else "imagen"
-            val mime = fileStore.queryMimeType(uri)
-                ?: if (isVideo) "video/mp4" else "image/jpeg"
-            val path = fileStore.importUri(uri, name, attachmentSync)
-            attachments.add(
-                parentType = AttachmentParentType.BOARD,
-                parentSyncId = board.syncId,
-                mimeType = mime,
-                name = name,
-                localPath = path,
-                syncId = attachmentSync
-            )
-            mediaAttachmentSyncId = attachmentSync
-            _uiState.update {
-                it.copy(
-                    background = if (isVideo) BoardBackground.VIDEO else BoardBackground.IMAGE,
-                    mediaUri = Uri.fromFile(File(path)),
-                    isVideoPlaying = false,
-                    dirty = true
+            try {
+                val mime = fileStore.queryMimeType(uri)
+                    ?: if (isVideo) "video/mp4" else "image/jpeg"
+                val path = fileStore.importUriValidated(uri, name, attachmentSync, mime)
+                attachments.add(
+                    parentType = AttachmentParentType.BOARD,
+                    parentSyncId = board.syncId,
+                    mimeType = mime,
+                    name = name,
+                    localPath = path,
+                    syncId = attachmentSync
                 )
+                mediaAttachmentSyncId = attachmentSync
+                _uiState.update {
+                    it.copy(
+                        background = if (isVideo) BoardBackground.VIDEO else BoardBackground.IMAGE,
+                        mediaUri = Uri.fromFile(File(path)),
+                        isVideoPlaying = false,
+                        dirty = true
+                    )
+                }
+            } catch (e: IllegalArgumentException) {
+                _uiState.update { it.copy(mediaError = e.message) }
             }
         }
     }
@@ -370,6 +390,10 @@ class PizarraViewModel(
 
     fun consumeSaved() {
         _uiState.update { it.copy(saved = false) }
+    }
+
+    fun consumeMediaError() {
+        _uiState.update { it.copy(mediaError = null) }
     }
 
     suspend fun persist() {

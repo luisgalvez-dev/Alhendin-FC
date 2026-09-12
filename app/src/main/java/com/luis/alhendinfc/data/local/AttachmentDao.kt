@@ -40,13 +40,16 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachment WHERE id = :id AND deletedAt IS NULL LIMIT 1")
     suspend fun getByIdOnce(id: Int): AttachmentEntity?
 
+    @Query("SELECT * FROM attachment WHERE syncId = :syncId LIMIT 1")
+    suspend fun getBySyncIdIncludingDeleted(syncId: String): AttachmentEntity?
+
     @Query("SELECT * FROM attachment ORDER BY id ASC")
     suspend fun getAllOnce(): List<AttachmentEntity>
 
     @Query(
         """
         SELECT * FROM attachment
-        WHERE deletedAt IS NULL AND localPath != ''
+        WHERE deletedAt IS NULL AND localPath IS NOT NULL AND localPath != ''
         ORDER BY id ASC
         """
     )
@@ -60,6 +63,12 @@ interface AttachmentDao {
 
     @Update
     suspend fun update(entity: AttachmentEntity)
+
+    @Query("UPDATE attachment SET localPath = :localPath WHERE syncId = :syncId")
+    suspend fun setLocalPath(syncId: String, localPath: String?)
+
+    @Query("UPDATE attachment SET remotePath = :remotePath WHERE syncId = :syncId")
+    suspend fun setRemotePath(syncId: String, remotePath: String?)
 
     @Query(
         "UPDATE attachment SET deletedAt = :now, updatedAt = :now WHERE id = :id AND deletedAt IS NULL"

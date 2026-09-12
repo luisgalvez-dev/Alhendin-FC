@@ -13,8 +13,8 @@ internal fun remapRestoredAttachments(
     attachments: List<AttachmentEntity>,
     store: LocalFileStore
 ): List<AttachmentEntity> = attachments.map { att ->
-    val candidates = listOf(
-        File(extractDir, att.localPath),
+    val candidates = listOfNotNull(
+        att.localPath?.let { File(extractDir, it) },
         File(extractDir, "attachments/${att.syncId}")
     )
     val src = candidates.firstOrNull { it.isFile }

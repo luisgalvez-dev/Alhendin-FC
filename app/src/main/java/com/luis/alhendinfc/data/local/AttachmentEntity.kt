@@ -18,7 +18,7 @@ data class AttachmentEntity(
     val parentSyncId: String,
     val mimeType: String,
     val name: String,
-    val localPath: String,
+    val localPath: String? = null,
     val remotePath: String? = null,
     override val createdAt: Long = 0L,
     override val updatedAt: Long = 0L,

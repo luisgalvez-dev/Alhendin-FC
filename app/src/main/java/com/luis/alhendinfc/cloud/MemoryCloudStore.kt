@@ -8,6 +8,8 @@ class MemoryCloudStore : CloudStore {
     private val users = ConcurrentHashMap<String, Map<String, Any?>>()
     private val homeLayouts = ConcurrentHashMap<String, String>()
     private val listeners = ConcurrentHashMap<String, MutableList<(List<CloudDoc>) -> Unit>>()
+    var failPuts: Boolean = false
+    var failListTypes: Set<String> = emptySet()
     private val lock = Any()
 
     @Volatile
@@ -31,12 +33,14 @@ class MemoryCloudStore : CloudStore {
     }
 
     override suspend fun put(collection: String, id: String, data: Map<String, Any?>) {
+        if (failPuts) error("firestore put failed")
         val col = collections.getOrPut(collection) { ConcurrentHashMap() }
         col[id] = HashMap(data)
         notify(collection)
     }
 
     override suspend fun list(collection: String): List<CloudDoc> {
+        if (collection in failListTypes) error("PERMISSION_DENIED")
         val col = collections[collection] ?: return emptyList()
         return col.entries.map { CloudDoc(it.key, it.value) }
     }

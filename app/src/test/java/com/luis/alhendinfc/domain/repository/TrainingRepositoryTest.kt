@@ -537,7 +537,22 @@ internal class InMemoryAttachmentDao : AttachmentDao {
     override suspend fun getAllOnce(): List<AttachmentEntity> = rows.sortedBy { it.id }
 
     override suspend fun getActiveWithFilesOnce(): List<AttachmentEntity> =
-        rows.filter { it.deletedAt == null && it.localPath.isNotBlank() }
+        rows.filter { it.deletedAt == null && !it.localPath.isNullOrBlank() }
+
+    override suspend fun getBySyncIdIncludingDeleted(syncId: String): AttachmentEntity? =
+        rows.firstOrNull { it.syncId == syncId }
+
+    override suspend fun setLocalPath(syncId: String, localPath: String?) {
+        val index = rows.indexOfFirst { it.syncId == syncId }
+        if (index >= 0) rows[index] = rows[index].copy(localPath = localPath)
+        publish()
+    }
+
+    override suspend fun setRemotePath(syncId: String, remotePath: String?) {
+        val index = rows.indexOfFirst { it.syncId == syncId }
+        if (index >= 0) rows[index] = rows[index].copy(remotePath = remotePath)
+        publish()
+    }
 
     override suspend fun insert(entity: AttachmentEntity): Long {
         val id = if (entity.id == 0) seq++ else entity.id

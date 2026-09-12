@@ -101,7 +101,7 @@ class SyncEngine(
 
     private suspend fun allRemoteSyncIds(): Set<String> {
         return SyncEntityType.DOWNLOAD_ORDER.flatMap { type ->
-            store.list(type).map { it.id }
+            listCollection(type).map { it.id }
         }.toSet()
     }
 
@@ -125,7 +125,7 @@ class SyncEngine(
         val remoteIds = mutableMapOf<String, Set<String>>()
         SyncEntityType.DOWNLOAD_ORDER.forEach { type ->
             val adapter = registry.adapter(type) ?: return@forEach
-            val docs = store.list(type)
+            val docs = listCollection(type)
             remoteIds[type] = docs.map { it.id }.toSet()
             db.withTransaction {
                 docs.forEach { doc ->
@@ -150,7 +150,7 @@ class SyncEngine(
 
     private suspend fun pull() {
         SyncEntityType.DOWNLOAD_ORDER.forEach { type ->
-            val docs = store.list(type)
+            val docs = listCollection(type)
             db.withTransaction {
                 docs.forEach { doc ->
                     when (applyIncoming(type, doc)) {
@@ -200,6 +200,20 @@ class SyncEngine(
             }
         }
         return adapter.applyRemote(doc)
+    }
+
+    /**
+     * Un list() denegado o fallido en una colección no puede abortar el sync
+     * antes de pushOutbox: la metadata pendiente se sigue publicando.
+     */
+    private suspend fun listCollection(type: String): List<CloudDoc> {
+        return try {
+            store.list(type)
+        } catch (e: UnavailableCloudException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     private suspend fun pushOutbox() {

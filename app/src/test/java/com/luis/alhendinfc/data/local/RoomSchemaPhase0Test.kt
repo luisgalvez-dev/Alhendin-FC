@@ -9,10 +9,10 @@ import org.junit.Test
 class RoomSchemaPhase0Test {
 
     @Test
-    fun roomVersionIs21AndSchemaExportIsEnabled() {
-        assertEquals(21, AlhendinDatabase.VERSION)
+    fun roomVersionIs22AndSchemaExportIsEnabled() {
+        assertEquals(22, AlhendinDatabase.VERSION)
         val source = databaseSource()
-        assertTrue(source.contains("version = 21"))
+        assertTrue(source.contains("version = 22"))
         assertTrue(source.contains("exportSchema = true"))
         assertTrue(source.contains("Migration14To15"))
         assertTrue(source.contains("Migration15To16"))
@@ -21,6 +21,7 @@ class RoomSchemaPhase0Test {
         assertTrue(source.contains("Migration18To19"))
         assertTrue(source.contains("Migration19To20"))
         assertTrue(source.contains("Migration20To21"))
+        assertTrue(source.contains("Migration21To22"))
     }
 
     @Test
@@ -41,6 +42,17 @@ class RoomSchemaPhase0Test {
         assertTrue(text.contains("syncId"))
         assertTrue(text.contains("dateEpochDay"))
         assertFalse(text.contains("index_team_deletedAt") || text.contains("index_player_deletedAt"))
+    }
+
+    @Test
+    fun schemaV22FileIsExportedWithNullableLocalPathAndTransferJob() {
+        val schema = schemaFile(22)
+        requireNotNull(schema) { "No se encontró el schema Room v22. Debe generarse al compilar." }
+        val text = schema.readText()
+        assertTrue(text.contains("\"version\": 22") || text.contains("\"version\":22"))
+        assertTrue(text.contains("\"tableName\": \"transfer_job\""))
+        assertTrue(text.contains("attachmentSyncId"))
+        assertFalse(text.contains("index_transfer_job_deletedAt"))
     }
 
     @Test
@@ -135,7 +147,8 @@ class RoomSchemaPhase0Test {
             "MatchDao.kt", "PlayerDao.kt", "TeamDao.kt", "MatchEventDao.kt",
             "CustomStatTypeDao.kt", "CalendarDao.kt", "TaskDao.kt",
             "TrainingDao.kt", "TrainingTaskDao.kt", "AttachmentDao.kt",
-            "RivalAnalysisDao.kt", "RivalLinkDao.kt", "OpponentPlayerDao.kt", "BoardDao.kt"
+            "RivalAnalysisDao.kt", "RivalLinkDao.kt", "OpponentPlayerDao.kt", "BoardDao.kt",
+            "TransferJobDao.kt"
         ).map { name ->
             listOf(
                 File("src/main/java/com/luis/alhendinfc/data/local/$name"),

@@ -38,7 +38,8 @@ service cloud.firestore {
             'teams', 'players', 'opponentClubs', 'opponentPlayers',
             'rivalAnalyses', 'rivalLinks', 'seasonFixtures',
             'matches', 'matchPlayers', 'matchEvents',
-            'customStatTypes', 'tasks', 'trainings', 'trainingTasks', 'boards'
+            'customStatTypes', 'tasks', 'trainings', 'trainingTasks', 'boards',
+            'attachments'
           ];
       }
     }

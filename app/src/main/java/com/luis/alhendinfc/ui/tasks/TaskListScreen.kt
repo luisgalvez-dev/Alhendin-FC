@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -262,6 +264,19 @@ private fun TaskRow(
                             image?.localPath?.takeIf { it.isNotBlank() }?.let(onViewImage)
                         }
                 )
+            } else if (image?.isPendingDownload == true) {
+                Box(
+                    modifier = Modifier
+                        .padding(end = 10.dp)
+                        .size(40.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = GreenMint,
+                        strokeWidth = 2.dp
+                    )
+                }
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(

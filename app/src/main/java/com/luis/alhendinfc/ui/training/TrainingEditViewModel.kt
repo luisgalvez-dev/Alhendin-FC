@@ -246,15 +246,19 @@ class TrainingEditViewModel(
     private suspend fun importAndAttach(parentSyncId: String, uri: Uri, name: String, mime: String) {
         if (parentSyncId.isBlank()) return
         val attachmentSync = UUID.randomUUID().toString()
-        val path = fileStore.importUri(uri, name.ifBlank { "archivo" }, attachmentSync)
-        attachmentRepository.add(
-            parentType = AttachmentParentType.TRAINING,
-            parentSyncId = parentSyncId,
-            mimeType = mime.ifBlank { "application/octet-stream" },
-            name = name.ifBlank { "archivo" },
-            localPath = path,
-            syncId = attachmentSync
-        )
+        try {
+            val mimeType = mime.ifBlank { "application/pdf" }
+            val path = fileStore.importUriValidated(uri, name.ifBlank { "archivo" }, attachmentSync, mimeType)
+            attachmentRepository.add(
+                parentType = AttachmentParentType.TRAINING,
+                parentSyncId = parentSyncId,
+                mimeType = mimeType,
+                name = name.ifBlank { "archivo" },
+                localPath = path,
+                syncId = attachmentSync
+            )
+        } catch (_: IllegalArgumentException) {
+        }
     }
 
     companion object {

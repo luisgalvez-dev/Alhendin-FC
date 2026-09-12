@@ -119,15 +119,19 @@ class MatchViewModel(
             val syncId = currentMatch.value?.syncId.orEmpty()
             if (syncId.isBlank()) return@launch
             val attachmentSync = UUID.randomUUID().toString()
-            val path = fileStore.importUri(uri, name.ifBlank { "informe" }, attachmentSync)
-            attachmentRepository.add(
-                parentType = AttachmentParentType.MATCH,
-                parentSyncId = syncId,
-                mimeType = mime.ifBlank { "application/octet-stream" },
-                name = name.ifBlank { "informe" },
-                localPath = path,
-                syncId = attachmentSync
-            )
+            try {
+                val mimeType = mime.ifBlank { "application/pdf" }
+                val path = fileStore.importUriValidated(uri, name.ifBlank { "informe" }, attachmentSync, mimeType)
+                attachmentRepository.add(
+                    parentType = AttachmentParentType.MATCH,
+                    parentSyncId = syncId,
+                    mimeType = mimeType,
+                    name = name.ifBlank { "informe" },
+                    localPath = path,
+                    syncId = attachmentSync
+                )
+            } catch (_: IllegalArgumentException) {
+            }
         }
     }
 

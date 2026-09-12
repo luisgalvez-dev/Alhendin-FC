@@ -236,8 +236,9 @@ class BackupRepository(
         val attachmentFiles = mutableMapOf<String, File>()
         val attachments = db.attachmentDao().getAllOnce().map { att ->
             if (att.deletedAt == null) {
-                val src = File(att.localPath)
-                if (src.isFile) {
+                val srcPath = att.localPath
+                val src = srcPath?.let { File(it) }
+                if (src != null && src.isFile) {
                     val relative = "attachments/${att.syncId}"
                     attachmentFiles[relative] = src
                     att.copy(localPath = relative)
@@ -379,7 +380,7 @@ class BackupRepository(
         private const val SAFETY_DIR = "safety_backups"
         private const val SAFETY_KEEP = 5
 
-        /** Tablas deportivas del ZIP. `sync_outbox` no viaja: se reconstruye al sincronizar. */
+        /** Tablas deportivas del ZIP. `sync_outbox` y `transfer_job` no viajan. */
         val ALL_TABLES = listOf(
             "team",
             "player",
@@ -647,7 +648,7 @@ private fun attachmentsToJson(list: List<AttachmentEntity>) = JSONArray().also {
                 .put("parentSyncId", t.parentSyncId)
                 .put("mimeType", t.mimeType)
                 .put("name", t.name)
-                .put("localPath", t.localPath)
+                .put("localPath", t.localPath ?: JSONObject.NULL)
                 .put("remotePath", t.remotePath)
                 .put("createdAt", t.createdAt)
                 .put("updatedAt", t.updatedAt)

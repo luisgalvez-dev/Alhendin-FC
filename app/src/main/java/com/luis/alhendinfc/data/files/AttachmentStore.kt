@@ -16,7 +16,7 @@ import java.io.InputStream
  */
 interface LocalFileStore {
     fun importStream(input: InputStream, displayName: String, syncId: String): String
-    fun exists(localPath: String): Boolean
+    fun exists(localPath: String?): Boolean
     fun file(localPath: String): File
 }
 
@@ -34,10 +34,10 @@ class DiskFileStore(private val root: File) : LocalFileStore {
         return dest.absolutePath
     }
 
-    override fun exists(localPath: String): Boolean {
-        if (localPath.isBlank()) return false
+    override fun exists(localPath: String?): Boolean {
+        if (localPath.isNullOrBlank()) return false
         val file = File(localPath)
-        return file.isFile && file.length() >= 0
+        return file.isFile
     }
 
     override fun file(localPath: String): File = File(localPath)
@@ -79,6 +79,33 @@ class AndroidAttachmentStore(
     }
 
     fun queryMimeType(uri: Uri): String? = context.contentResolver.getType(uri)
+
+    fun querySize(uri: Uri): Long? {
+        return try {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+                ?.use { cursor ->
+                    if (!cursor.moveToFirst()) return@use null
+                    val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (idx < 0) null else cursor.getLong(idx).takeIf { it >= 0L }
+                }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun importUriValidated(uri: Uri, fallbackName: String, syncId: String, mimeType: String): String {
+        com.luis.alhendinfc.domain.model.AttachmentRules.requireAllowedMime(mimeType)
+        querySize(uri)?.let { com.luis.alhendinfc.domain.model.AttachmentRules.requireSize(it) }
+        val path = importUri(uri, fallbackName, syncId)
+        val file = File(path)
+        try {
+            com.luis.alhendinfc.domain.model.AttachmentRules.requireSize(file.length())
+        } catch (e: IllegalArgumentException) {
+            file.delete()
+            throw e
+        }
+        return path
+    }
 
     companion object {
         const val DIR = "attachments"

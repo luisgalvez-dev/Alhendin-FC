@@ -15,12 +15,21 @@ import com.luis.alhendinfc.cloud.auth.AuthSession
 import com.luis.alhendinfc.cloud.auth.DataStoreMembershipCache
 import com.luis.alhendinfc.cloud.auth.FirebaseAuthBackend
 import com.luis.alhendinfc.cloud.auth.UnavailableAuthBackend
+import com.luis.alhendinfc.cloud.storage.BinaryStorageFactory
+import com.luis.alhendinfc.cloud.storage.FirebaseIdTokenProvider
+import com.luis.alhendinfc.cloud.storage.IdTokenProvider
+import com.luis.alhendinfc.data.files.AndroidAttachmentStore
+import com.luis.alhendinfc.data.files.DiskFileStore
 import com.luis.alhendinfc.data.local.AlhendinDatabase
 import com.luis.alhendinfc.dev.DevSeedData
 import com.luis.alhendinfc.data.preferences.HomePreferencesRepository
 import com.luis.alhendinfc.data.sync.SyncEngine
 import com.luis.alhendinfc.data.sync.SyncEntityType
 import com.luis.alhendinfc.data.sync.SyncRegistry
+import com.luis.alhendinfc.data.sync.TransferEngine
+import com.luis.alhendinfc.data.sync.TransferHooks
+import com.luis.alhendinfc.data.sync.TransferScheduler
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -40,7 +49,8 @@ class AlhendinCloud private constructor(
     val store: CloudStore,
     val auth: AuthRepository,
     val engine: SyncEngine,
-    val homePrefs: HomePreferencesRepository
+    val homePrefs: HomePreferencesRepository,
+    val transferEngine: TransferEngine
 ) {
     private val app = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -65,6 +75,17 @@ class AlhendinCloud private constructor(
                 .collect { count ->
                     if (count > 0 && _session.value is AuthSession.Ready) {
                         engine.sync()
+                    }
+                }
+        }
+        scope.launch {
+            AlhendinDatabase.getInstance(app).transferJobDao().observeCount()
+                .distinctUntilChanged()
+                .debounce(500)
+                .collect { count ->
+                    if (count > 0 && _session.value is AuthSession.Ready) {
+                        TransferScheduler.schedule(app)
+                        if (online) runCatching { transferEngine.processAll() }
                     }
                 }
         }
@@ -110,6 +131,11 @@ class AlhendinCloud private constructor(
         if (resolved is AuthSession.Ready) {
             startListeners()
             engine.sync()
+            runCatching {
+                transferEngine.reconcile()
+                transferEngine.processAll()
+            }
+            TransferScheduler.schedule(app)
         } else {
             stopListeners()
         }
@@ -140,7 +166,11 @@ class AlhendinCloud private constructor(
                     online = true
                     scope.launch {
                         refreshSession()
-                        if (_session.value is AuthSession.Ready) engine.sync()
+                        if (_session.value is AuthSession.Ready) {
+                            engine.sync()
+                            runCatching { transferEngine.processAll() }
+                            TransferScheduler.schedule(app)
+                        }
                     }
                 }
 
@@ -160,11 +190,14 @@ class AlhendinCloud private constructor(
                     if (_session.value is AuthSession.Ready) {
                         delay(300)
                         engine.sync()
+                        runCatching { transferEngine.processAll() }
                     }
                 }
             }
         })
     }
+
+    suspend fun pendingTransfers(): Int = AlhendinDatabase.getInstance(app).transferJobDao().count()
 
     companion object {
         @Volatile
@@ -181,8 +214,13 @@ class AlhendinCloud private constructor(
             store: CloudStore,
             auth: AuthRepository,
             engine: SyncEngine,
-            homePrefs: HomePreferencesRepository
-        ): AlhendinCloud = AlhendinCloud(context, store, auth, engine, homePrefs)
+            homePrefs: HomePreferencesRepository,
+            transferEngine: TransferEngine
+        ): AlhendinCloud {
+            TransferHooks.engine = transferEngine
+            TransferHooks.appContext = context.applicationContext
+            return AlhendinCloud(context, store, auth, engine, homePrefs, transferEngine)
+        }
 
         private fun create(context: Context): AlhendinCloud {
             val db = AlhendinDatabase.getInstance(context)
@@ -190,14 +228,19 @@ class AlhendinCloud private constructor(
             val firebaseReady = configured && runCatching { FirebaseApp.getInstance() }.isSuccess
             val store: CloudStore
             val authRepo: AuthRepository
+            val tokenProvider: IdTokenProvider
             if (firebaseReady) {
-                store = FirestoreCloudStore(FirebaseFirestore.getInstance(), CloudConfig.workspaceId)
+                store = FirestoreCloudStore(
+                    FirebaseFirestore.getInstance(),
+                    CloudConfig.workspaceId
+                )
                 authRepo = AuthRepository(
                     FirebaseAuthBackend(FirebaseAuth.getInstance()),
                     store,
                     CloudConfig.workspaceId,
                     DataStoreMembershipCache(context)
                 )
+                tokenProvider = FirebaseIdTokenProvider(FirebaseAuth.getInstance())
             } else {
                 store = UnavailableCloudStore()
                 authRepo = AuthRepository(
@@ -206,23 +249,41 @@ class AlhendinCloud private constructor(
                     CloudConfig.workspaceId,
                     DataStoreMembershipCache(context)
                 )
+                tokenProvider = IdTokenProvider { null }
+            }
+            val isOnline = {
+                val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                cm?.isCurrentlyOnline() ?: true
             }
             val engine = SyncEngine(
                 db = db,
                 store = store,
                 registry = SyncRegistry(db),
-                isOnline = {
-                    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                    cm?.isCurrentlyOnline() ?: true
-                },
+                isOnline = isOnline,
                 onWonBootstrap = { DevSeedData.runIfNeeded(context) }
             )
+            val transferEngine = TransferEngine(
+                db = db,
+                blobs = BinaryStorageFactory.create(
+                    CloudStorageSettings.url,
+                    CloudStorageSettings.publishableKey,
+                    CloudStorageSettings.bucket,
+                    tokenProvider
+                ),
+                files = DiskFileStore(File(context.filesDir, AndroidAttachmentStore.DIR)),
+                workspaceId = CloudConfig.workspaceId,
+                isOnline = isOnline,
+                tokenProvider = tokenProvider
+            )
+            TransferHooks.engine = transferEngine
+            TransferHooks.appContext = context.applicationContext
             return AlhendinCloud(
                 context,
                 store,
                 authRepo,
                 engine,
-                HomePreferencesRepository.getInstance(context)
+                HomePreferencesRepository.getInstance(context),
+                transferEngine
             )
         }
     }

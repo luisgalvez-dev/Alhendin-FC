@@ -56,7 +56,7 @@ import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.util.ImageViewer
-import com.luis.alhendinfc.ui.util.openAttachment
+import com.luis.alhendinfc.ui.util.openOrDownloadAttachment
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -293,12 +293,16 @@ fun TrainingEditScreen(
                 ) {
                     TextButton(
                         onClick = {
-                            if (att.isImage) viewingPath = att.localPath
-                            else openAttachment(context, att)
+                            openOrDownloadAttachment(context, att) { viewingPath = it }
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text(att.name.ifBlank { att.mimeType }, color = Color.White)
+                        Column {
+                            Text(att.name.ifBlank { att.mimeType }, color = Color.White)
+                            att.transferHint?.let { hint ->
+                                Text(hint, color = AmberAccent, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                     }
                     IconButton(onClick = { onDeleteAttachment(att) }) {
                         Icon(Icons.Default.Delete, contentDescription = "Eliminar archivo", tint = Color(0xFFFF8A80))

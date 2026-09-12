@@ -12,6 +12,7 @@ import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.data.sync.LiveMatchGuard
 import com.luis.alhendinfc.data.sync.SyncEntityType
 import com.luis.alhendinfc.data.sync.SyncHooks
+import com.luis.alhendinfc.data.sync.TransferHooks
 import com.luis.alhendinfc.domain.model.CallupStatus
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchEvent
@@ -70,6 +71,12 @@ class MatchRepositoryImpl(
         val existing = dao.getByIdOnce(match.id) ?: return
         val events = eventDao.getByMatchIncludingDeleted(match.id)
         val players = dao.getMatchPlayersByMatchIncludingDeleted(match.id)
+        val syncId = match.syncId.ifBlank { existing.syncId }
+        val attachments = if (syncId.isNotBlank()) {
+            attachmentDao?.getActiveByParentOnce(AttachmentParentType.MATCH, syncId).orEmpty()
+        } else {
+            emptyList()
+        }
         val items = buildList {
             add(SyncEntityType.MATCH to existing.syncId)
             events.forEach { add(SyncEntityType.MATCH_EVENT to it.syncId) }
@@ -78,12 +85,12 @@ class MatchRepositoryImpl(
         SyncHooks.localMany(items) {
             eventDao.markDeletedByMatch(match.id, now)
             dao.markDeletedPlayersByMatch(match.id, now)
-            val syncId = match.syncId.ifBlank { existing.syncId }
             if (syncId.isNotBlank()) {
                 attachmentDao?.markDeletedByParent(AttachmentParentType.MATCH, syncId, now)
             }
             dao.markDeleted(match.id, now)
         }
+        attachments.forEach { TransferHooks.onLocalTombstone(it) }
     }
 
     override suspend fun setPlayerCallup(matchId: Int, playerId: Int, status: CallupStatus) {

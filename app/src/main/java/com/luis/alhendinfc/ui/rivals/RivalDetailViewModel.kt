@@ -113,15 +113,19 @@ class RivalDetailViewModel(
             val syncId = club.value?.syncId.orEmpty()
             if (syncId.isBlank()) return@launch
             val attachmentSync = UUID.randomUUID().toString()
-            val path = fileStore.importUri(uri, name.ifBlank { "archivo" }, attachmentSync)
-            attachmentRepository.add(
-                parentType = AttachmentParentType.OPPONENT,
-                parentSyncId = syncId,
-                mimeType = mime.ifBlank { "application/octet-stream" },
-                name = name.ifBlank { "archivo" },
-                localPath = path,
-                syncId = attachmentSync
-            )
+            try {
+                val mimeType = mime.ifBlank { "application/pdf" }
+                val path = fileStore.importUriValidated(uri, name.ifBlank { "archivo" }, attachmentSync, mimeType)
+                attachmentRepository.add(
+                    parentType = AttachmentParentType.OPPONENT,
+                    parentSyncId = syncId,
+                    mimeType = mimeType,
+                    name = name.ifBlank { "archivo" },
+                    localPath = path,
+                    syncId = attachmentSync
+                )
+            } catch (_: IllegalArgumentException) {
+            }
         }
     }
 

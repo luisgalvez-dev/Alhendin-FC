@@ -7,9 +7,11 @@ import com.luis.alhendinfc.data.local.BoardEntity
 import com.luis.alhendinfc.data.local.EntitySync
 import com.luis.alhendinfc.data.local.EntityWrites
 import com.luis.alhendinfc.data.local.TaskDao
+import com.luis.alhendinfc.data.local.TransferKind
 import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.data.sync.SyncEntityType
 import com.luis.alhendinfc.data.sync.SyncHooks
+import com.luis.alhendinfc.data.sync.TransferHooks
 import com.luis.alhendinfc.domain.model.Board
 import com.luis.alhendinfc.domain.model.BoardRules
 import com.luis.alhendinfc.domain.model.BoardScene
@@ -96,6 +98,11 @@ class BoardRepository(
         } else {
             emptyList()
         }
+        val attachments = if (existing.syncId.isNotBlank()) {
+            attachmentDao.getActiveByParentOnce(AttachmentParentType.BOARD, existing.syncId)
+        } else {
+            emptyList()
+        }
         val items = buildList {
             add(SyncEntityType.BOARD to existing.syncId)
             linkedTasks.forEach { add(SyncEntityType.TASK to it.syncId) }
@@ -113,6 +120,7 @@ class BoardRepository(
                 }
             }
         }
+        attachments.forEach { TransferHooks.onLocalTombstone(it) }
     }
 
     /**
@@ -125,10 +133,11 @@ class BoardRepository(
         val originals = attachmentDao.getActiveByParentOnce(AttachmentParentType.BOARD, source.syncId)
         val copies = originals.map { att ->
             val newSync = UUID.randomUUID().toString()
-            val path = if (fileStore != null && att.localPath.isNotBlank() && fileStore.exists(att.localPath)) {
-                fileStore.copyFile(att.localPath, att.name, newSync)
+            val local = att.localPath
+            val path = if (fileStore != null && !local.isNullOrBlank() && fileStore.exists(local)) {
+                fileStore.copyFile(local, att.name, newSync)
             } else {
-                att.localPath
+                null
             }
             Triple(att, newSync, path)
         }
@@ -159,11 +168,17 @@ class BoardRepository(
                         id = 0,
                         syncId = newSync,
                         parentSyncId = created.syncId,
-                        localPath = path
+                        localPath = path,
+                        remotePath = null
                     ),
                     now
                 )
             )
+            if (!path.isNullOrBlank()) {
+                TransferHooks.enqueueNow(TransferKind.UPLOAD, newSync)
+            } else if (!att.remotePath.isNullOrBlank()) {
+                TransferHooks.enqueueNow(TransferKind.REPLICATE, newSync, att.remotePath)
+            }
         }
         return newId
     }

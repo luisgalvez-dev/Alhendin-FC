@@ -125,7 +125,8 @@ fun PizarraScreen(
     onDeleteSelected: () -> Unit,
     onUpdateNumber: (String) -> Unit,
     onUpdateText: (String) -> Unit,
-    onSavedConsumed: () -> Unit = {}
+    onSavedConsumed: () -> Unit = {},
+    onMediaErrorConsumed: () -> Unit = {}
 ) {
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -145,6 +146,11 @@ fun PizarraScreen(
             snackbarHostState.showSnackbar("Pizarra guardada")
             onSavedConsumed()
         }
+    }
+    LaunchedEffect(state.mediaError) {
+        val error = state.mediaError ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(error)
+        onMediaErrorConsumed()
     }
 
     if (askingText) {

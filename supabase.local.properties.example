@@ -1,0 +1,4 @@
+# Copiar a supabase.local.properties (gitignored).
+# Usar la publishable key (anon). NUNCA service_role.
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY

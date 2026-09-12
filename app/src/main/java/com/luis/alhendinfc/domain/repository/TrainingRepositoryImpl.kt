@@ -13,6 +13,7 @@ import com.luis.alhendinfc.data.local.TrainingTaskEntity
 import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.data.sync.SyncEntityType
 import com.luis.alhendinfc.data.sync.SyncHooks
+import com.luis.alhendinfc.data.sync.TransferHooks
 import com.luis.alhendinfc.domain.model.CalendarDate
 import com.luis.alhendinfc.domain.model.Task
 import com.luis.alhendinfc.domain.model.Training
@@ -87,6 +88,11 @@ class TrainingRepositoryImpl(
         val now = EntitySync.now()
         val existing = trainingDao.getByIdIncludingDeleted(training.id) ?: return
         val tasks = trainingTaskDao.getAllOnce().filter { it.trainingId == training.id }
+        val attachments = if (existing.syncId.isNotBlank()) {
+            attachmentDao.getActiveByParentOnce(AttachmentParentType.TRAINING, existing.syncId)
+        } else {
+            emptyList()
+        }
         val items = buildList {
             add(SyncEntityType.TRAINING to existing.syncId)
             tasks.forEach { add(SyncEntityType.TRAINING_TASK to it.syncId) }
@@ -98,6 +104,7 @@ class TrainingRepositoryImpl(
                 attachmentDao.markDeletedByParent(AttachmentParentType.TRAINING, existing.syncId, now)
             }
         }
+        attachments.forEach { TransferHooks.onLocalTombstone(it) }
     }
 
     override suspend fun addTask(trainingId: Int, taskId: Int) {

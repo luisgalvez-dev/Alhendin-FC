@@ -1,9 +1,14 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
 }
+
+fun escapeBuildConfig(value: String): String =
+    value.replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.luis.alhendinfc"
@@ -19,6 +24,9 @@ android {
         versionName = "1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SUPABASE_URL", "\"\"")
+        buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"\"")
+        buildConfigField("String", "SUPABASE_BUCKET", "\"alhendin-files\"")
     }
 
     flavorDimensions += "environment"
@@ -31,6 +39,18 @@ android {
         create("dev") {
             dimension = "environment"
             applicationId = "com.luis.alhendinfc.dev"
+            val local = rootProject.file("supabase.local.properties")
+            val props = Properties()
+            if (local.exists()) {
+                local.inputStream().use { props.load(it) }
+            }
+            val url = props.getProperty("SUPABASE_URL", "").trim()
+            val key = props.getProperty("SUPABASE_PUBLISHABLE_KEY", "").trim()
+            require(!key.contains("service_role", ignoreCase = true)) {
+                "supabase.local.properties no puede contener service_role"
+            }
+            buildConfigField("String", "SUPABASE_URL", "\"${escapeBuildConfig(url)}\"")
+            buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"${escapeBuildConfig(key)}\"")
         }
     }
 
@@ -58,6 +78,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {
@@ -103,6 +124,10 @@ dependencies {
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.storage)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.play.services)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

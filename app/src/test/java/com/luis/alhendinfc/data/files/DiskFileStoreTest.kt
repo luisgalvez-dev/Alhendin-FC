@@ -45,10 +45,10 @@ class DiskFileStoreTest {
         val remapped = remapRestoredAttachments(extract, listOf(original), store)
         assertTrue(packed.isFile)
         assertEquals("pdf-bytes", packed.readText())
-        assertTrue(File(remapped[0].localPath).isFile)
-        assertEquals("pdf-bytes", File(remapped[0].localPath).readText())
+        assertTrue(File(requireNotNull(remapped[0].localPath)).isFile)
+        assertEquals("pdf-bytes", File(requireNotNull(remapped[0].localPath)).readText())
         assertEquals(4, remapped[0].id)
         assertEquals("att-sync-1", remapped[0].syncId)
-        assertFalse(remapped[0].localPath.startsWith("content://"))
+        assertFalse(requireNotNull(remapped[0].localPath).startsWith("content://"))
     }
 }

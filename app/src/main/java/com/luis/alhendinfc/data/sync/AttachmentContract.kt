@@ -13,6 +13,7 @@ object AttachmentParentType {
 /**
  * Contrato de Attachment. Room persiste [com.luis.alhendinfc.data.local.AttachmentEntity].
  * parentType: TRAINING, TASK, MATCH, OPPONENT, BOARD.
+ * [localPath] es solo local; [remotePath] es la ruta de Storage.
  */
 data class AttachmentContract(
     val id: Int = 0,
@@ -21,7 +22,7 @@ data class AttachmentContract(
     val parentSyncId: String,
     val mimeType: String,
     val name: String,
-    val localPath: String,
+    val localPath: String? = null,
     val remotePath: String? = null,
     val createdAt: Long,
     val updatedAt: Long,

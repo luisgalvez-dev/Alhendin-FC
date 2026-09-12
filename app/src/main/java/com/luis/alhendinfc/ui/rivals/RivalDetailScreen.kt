@@ -70,7 +70,7 @@ import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
 import com.luis.alhendinfc.ui.util.ImageViewer
-import com.luis.alhendinfc.ui.util.openAttachment
+import com.luis.alhendinfc.ui.util.openOrDownloadAttachment
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -506,12 +506,15 @@ private fun FilesTab(
         attachments.forEach { att ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 TextButton(
-                    onClick = {
-                        if (att.isImage) onViewImage(att.localPath) else openAttachment(context, att)
-                    },
+                    onClick = { openOrDownloadAttachment(context, att, onViewImage) },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(att.name.ifBlank { att.mimeType }, color = Color.White)
+                    Column {
+                        Text(att.name.ifBlank { att.mimeType }, color = Color.White)
+                        att.transferHint?.let { hint ->
+                            Text(hint, color = AmberAccent, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
                 }
                 IconButton(onClick = { onDelete(att) }) {
                     Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = Color(0xFFFF8A80))
@@ -547,14 +550,16 @@ private fun FilesTab(
                 Text(report.matchHeading, color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelMedium)
                 TextButton(
                     onClick = {
-                        if (report.attachment.isImage) onViewImage(report.attachment.localPath)
-                        else openAttachment(context, report.attachment)
+                        openOrDownloadAttachment(context, report.attachment, onViewImage)
                     }
                 ) {
                     Text(
                         "${report.attachment.name.ifBlank { report.attachment.mimeType }} · ${report.attachment.typeLabel}",
                         color = Color.White
                     )
+                    report.attachment.transferHint?.let { hint ->
+                        Text(hint, color = AmberAccent, style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }

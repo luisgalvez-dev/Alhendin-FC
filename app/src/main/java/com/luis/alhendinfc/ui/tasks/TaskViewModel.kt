@@ -84,7 +84,10 @@ class TaskViewModel(
     }
 
     fun delete(task: Task) {
-        viewModelScope.launch { repository.delete(task) }
+        viewModelScope.launch {
+            if (task.syncId.isNotBlank()) attachments.deleteByParent(AttachmentParentType.TASK, task.syncId)
+            repository.delete(task)
+        }
     }
 
     fun createBoardForTask(task: Task, onCreated: (Int) -> Unit) {
@@ -114,8 +117,11 @@ class TaskViewModel(
         val attachmentSync = UUID.randomUUID().toString()
         val name = fileStore.queryDisplayName(uri) ?: "imagen"
         val mime = fileStore.queryMimeType(uri)?.takeIf { it.startsWith("image/") } ?: "image/jpeg"
-        val path = fileStore.importUri(uri, name, attachmentSync)
-        attachments.setTaskImage(taskSyncId, mime, name, path)
+        try {
+            val path = fileStore.importUriValidated(uri, name, attachmentSync, mime)
+            attachments.setTaskImage(taskSyncId, mime, name, path)
+        } catch (_: IllegalArgumentException) {
+        }
     }
 
     companion object {

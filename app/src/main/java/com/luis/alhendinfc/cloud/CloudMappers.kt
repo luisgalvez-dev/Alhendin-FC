@@ -1,5 +1,6 @@
 package com.luis.alhendinfc.cloud
 
+import com.luis.alhendinfc.data.local.AttachmentEntity
 import com.luis.alhendinfc.data.local.BoardEntity
 import com.luis.alhendinfc.data.local.CustomStatTypeEntity
 import com.luis.alhendinfc.data.local.MatchEntity
@@ -273,6 +274,20 @@ object CloudMappers {
             "sceneVersion" to entity.sceneVersion,
             "sceneJson" to BoardCloudSanitizer.portableSceneJson(entity.sceneJson)
         )
+        assertNoIntIdentity(data)
+        return CloudDoc(entity.syncId, data)
+    }
+
+    fun attachment(entity: AttachmentEntity): CloudDoc {
+        val remotePath = CloudUri.portableOrNull(entity.remotePath)
+        val data = meta(entity.syncId, entity.createdAt, entity.updatedAt, entity.deletedAt) + mapOf(
+            "parentType" to entity.parentType,
+            "parentSyncId" to entity.parentSyncId,
+            "mime" to entity.mimeType,
+            "name" to entity.name,
+            "remotePath" to remotePath
+        )
+        check(!data.containsKey("localPath")) { "El DTO cloud no puede incluir localPath" }
         assertNoIntIdentity(data)
         return CloudDoc(entity.syncId, data)
     }

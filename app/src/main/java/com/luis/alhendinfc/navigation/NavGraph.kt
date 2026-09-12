@@ -917,7 +917,8 @@ private fun PizarraRoute(
         onDeleteSelected = vm::deleteSelected,
         onUpdateNumber = vm::updateSelectedNumber,
         onUpdateText = vm::updateSelectedText,
-        onSavedConsumed = vm::consumeSaved
+        onSavedConsumed = vm::consumeSaved,
+        onMediaErrorConsumed = vm::consumeMediaError
     )
 }
 

@@ -117,4 +117,50 @@ class CloudMappingTest {
         assertFalse(doc.data.containsKey("playerId"))
         CloudMappers.assertNoIntIdentity(doc.data)
     }
+
+    @Test
+    fun attachmentCloud_neverIncludesLocalPath_andKeepsRemotePath() {
+        val att = com.luis.alhendinfc.data.local.AttachmentEntity(
+            id = 4,
+            syncId = "att-sync-1",
+            parentType = "TASK",
+            parentSyncId = "task-sync",
+            mimeType = "image/jpeg",
+            name = "foto.jpg",
+            localPath = "/data/user/0/files/foto.jpg",
+            remotePath = "workspaces/alhendin-dev/attachments/att-sync-1/foto.jpg",
+            createdAt = 1L,
+            updatedAt = 2L
+        )
+        val doc = CloudMappers.attachment(att)
+        assertEquals("att-sync-1", doc.id)
+        assertEquals("TASK", doc.data["parentType"])
+        assertEquals("task-sync", doc.data["parentSyncId"])
+        assertEquals("image/jpeg", doc.data["mime"])
+        assertEquals("foto.jpg", doc.data["name"])
+        assertEquals("workspaces/alhendin-dev/attachments/att-sync-1/foto.jpg", doc.data["remotePath"])
+        assertTrue(StoragePath.isPortableObjectPath(doc.str("remotePath")))
+        assertFalse(doc.data.containsKey("localPath"))
+        assertFalse(doc.data.containsKey("id"))
+        CloudMappers.assertNoIntIdentity(doc.data)
+        assertFalse(CloudUri.isLocal(doc.strOrNull("remotePath")))
+    }
+
+    @Test
+    fun attachmentCloud_stripsLocalRemotePath() {
+        val att = com.luis.alhendinfc.data.local.AttachmentEntity(
+            syncId = "att-sync-2",
+            parentType = "MATCH",
+            parentSyncId = "match-sync",
+            mimeType = "application/pdf",
+            name = "informe.pdf",
+            localPath = "content://media/informe.pdf",
+            remotePath = "file:///data/informe.pdf",
+            createdAt = 1L,
+            updatedAt = 2L
+        )
+        val doc = CloudMappers.attachment(att)
+        assertNull(doc.data["remotePath"])
+        assertFalse(doc.data.containsKey("localPath"))
+    }
 }

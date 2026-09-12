@@ -2,6 +2,8 @@ package com.luis.alhendinfc.data.sync
 
 import com.luis.alhendinfc.cloud.CloudDoc
 import com.luis.alhendinfc.cloud.CloudMappers
+import com.luis.alhendinfc.cloud.CloudUri
+import com.luis.alhendinfc.data.local.AttachmentEntity
 import com.luis.alhendinfc.data.local.AlhendinDatabase
 import com.luis.alhendinfc.data.local.BoardEntity
 import com.luis.alhendinfc.data.local.CustomStatTypeEntity
@@ -18,6 +20,7 @@ import com.luis.alhendinfc.data.local.TaskEntity
 import com.luis.alhendinfc.data.local.TeamEntity
 import com.luis.alhendinfc.data.local.TrainingEntity
 import com.luis.alhendinfc.data.local.TrainingTaskEntity
+import com.luis.alhendinfc.data.local.TransferKind
 import com.luis.alhendinfc.domain.model.MatchStatus
 
 enum class RemoteApplyResult { APPLIED, DEFERRED, IGNORED }
@@ -47,7 +50,8 @@ class SyncRegistry(private val db: AlhendinDatabase) {
         SyncEntityType.TRAINING_TASK to trainingTaskAdapter(),
         SyncEntityType.RIVAL_ANALYSIS to rivalAnalysisAdapter(),
         SyncEntityType.RIVAL_LINK to rivalLinkAdapter(),
-        SyncEntityType.OPPONENT_PLAYER to opponentPlayerAdapter()
+        SyncEntityType.OPPONENT_PLAYER to opponentPlayerAdapter(),
+        SyncEntityType.ATTACHMENT to attachmentAdapter()
     )
 
     fun adapter(type: String): SyncAdapter? = adapters[type]
@@ -1051,6 +1055,79 @@ class SyncRegistry(private val db: AlhendinDatabase) {
                                 deletedAt = doc.deletedAt
                             )
                         )
+                    }
+                    RemoteApplyResult.APPLIED
+                }
+            }
+        }
+    )
+
+    private fun attachmentAdapter() = SyncAdapter(
+        type = SyncEntityType.ATTACHMENT,
+        listLocal = {
+            db.attachmentDao().getAllOnce()
+                .filter { it.syncId.isNotBlank() }
+                .map { CloudMappers.attachment(it) }
+        },
+        readLocal = readLocal@{ id ->
+            db.attachmentDao().getBySyncIdIncludingDeleted(id)?.let { CloudMappers.attachment(it) }
+        },
+        shouldPush = { doc ->
+            doc.deletedAt != null || !doc.strOrNull("remotePath").isNullOrBlank()
+        },
+        applyRemote = applyRemote@{ doc ->
+            val remotePath = CloudUri.portableOrNull(doc.strOrNull("remotePath"))
+            if (doc.deletedAt == null && remotePath.isNullOrBlank()) {
+                return@applyRemote RemoteApplyResult.IGNORED
+            }
+            val parentType = doc.str("parentType")
+            val parentSyncId = doc.str("parentSyncId")
+            if (parentType !in AttachmentParentType.KNOWN || parentSyncId.isBlank()) {
+                return@applyRemote RemoteApplyResult.IGNORED
+            }
+            val dao = db.attachmentDao()
+            val existing = dao.getBySyncIdIncludingDeleted(doc.id)
+            when (lww(existing?.updatedAt ?: 0L, existing?.deletedAt, doc)) {
+                LwwDecision.NOOP -> RemoteApplyResult.IGNORED
+                LwwDecision.KEEP_LOCAL_AND_PUSH -> {
+                    existing?.syncId?.let { SyncHooks.enqueue(SyncEntityType.ATTACHMENT, it) }
+                    RemoteApplyResult.IGNORED
+                }
+                LwwDecision.APPLY_REMOTE -> {
+                    if (existing == null) {
+                        dao.insert(
+                            AttachmentEntity(
+                                syncId = doc.id,
+                                parentType = parentType,
+                                parentSyncId = parentSyncId,
+                                mimeType = doc.strOrNull("mime") ?: doc.str("mimeType"),
+                                name = doc.str("name"),
+                                localPath = null,
+                                remotePath = remotePath,
+                                createdAt = doc.createdAt,
+                                updatedAt = doc.updatedAt,
+                                deletedAt = doc.deletedAt
+                            )
+                        )
+                    } else {
+                        dao.update(
+                            existing.copy(
+                                parentType = parentType,
+                                parentSyncId = parentSyncId,
+                                mimeType = doc.strOrNull("mime") ?: doc.str("mimeType").ifBlank { existing.mimeType },
+                                name = doc.str("name").ifBlank { existing.name },
+                                remotePath = remotePath ?: existing.remotePath,
+                                updatedAt = doc.updatedAt,
+                                deletedAt = doc.deletedAt
+                            )
+                        )
+                    }
+                    val after = dao.getBySyncIdIncludingDeleted(doc.id)
+                    if (after != null && after.deletedAt == null && !after.remotePath.isNullOrBlank()) {
+                        val hasFile = !after.localPath.isNullOrBlank()
+                        if (!hasFile) {
+                            TransferHooks.enqueueNow(TransferKind.DOWNLOAD, after.syncId)
+                        }
                     }
                     RemoteApplyResult.APPLIED
                 }
