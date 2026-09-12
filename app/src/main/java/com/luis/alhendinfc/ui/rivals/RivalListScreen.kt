@@ -55,8 +55,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.RfafStandings
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
@@ -75,7 +77,8 @@ fun RivalListScreen(
     onOpenClub: (OpponentClub) -> Unit,
     onAddClub: (name: String, shortName: String, stadium: String, shieldUri: String?, kitColors: String) -> Unit,
     onDeleteClub: (OpponentClub) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    opponentShields: Map<String, Attachment> = emptyMap()
 ) {
     var creating by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<OpponentClub?>(null) }
@@ -220,10 +223,12 @@ fun RivalListScreen(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(clubs, key = { it.id }) { club ->
+                        val shieldPath = SharedMedia.displayPath(opponentShields[club.syncId], club.shieldUri)
                         RivalRow(
                             club = club,
+                            shieldPath = shieldPath,
                             onOpen = { onOpenClub(club) },
-                            onViewShield = { club.shieldUri?.let { viewingShield = it } },
+                            onViewShield = { shieldPath?.let { viewingShield = it } },
                             onDelete = { pendingDelete = club }
                         )
                     }
@@ -237,6 +242,7 @@ fun RivalListScreen(
 @Composable
 private fun RivalRow(
     club: OpponentClub,
+    shieldPath: String?,
     onOpen: () -> Unit,
     onViewShield: () -> Unit,
     onDelete: () -> Unit
@@ -254,10 +260,10 @@ private fun RivalRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             RivalShieldThumb(
-                shieldUri = club.shieldUri,
+                shieldUri = shieldPath,
                 fallback = club.displayShort.take(1).uppercase(),
                 size = 48,
-                onClick = if (!club.shieldUri.isNullOrBlank()) onViewShield else null
+                onClick = if (!shieldPath.isNullOrBlank()) onViewShield else null
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(club.name, fontWeight = FontWeight.Bold, color = Color.White)

@@ -1,6 +1,7 @@
 package com.luis.alhendinfc.ui.team
 
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -45,15 +46,18 @@ import com.luis.alhendinfc.ui.util.LocalImageLoader
 @Composable
 fun TeamEditDialog(
     currentTeam: Team?,
-    onConfirm: (Team) -> Unit,
+    previewShieldPath: String? = currentTeam?.shieldUri,
+    onConfirm: (Team, shield: Uri?, clearShield: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     var name by remember { mutableStateOf(currentTeam?.name ?: "") }
     var category by remember { mutableStateOf(currentTeam?.category ?: "") }
     var season by remember { mutableStateOf(currentTeam?.season ?: "") }
-    var shieldUri by remember { mutableStateOf(currentTeam?.shieldUri) }
+    var shieldUri by remember { mutableStateOf(previewShieldPath) }
     var shieldBitmap by remember(shieldUri) { mutableStateOf<ImageBitmap?>(null) }
+    var pickedUri by remember { mutableStateOf<Uri?>(null) }
+    var clearedShield by remember { mutableStateOf(false) }
 
     LaunchedEffect(shieldUri) {
         shieldBitmap = LocalImageLoader.load(context, shieldUri, maxSidePx = 384)
@@ -70,6 +74,8 @@ fun TeamEditDialog(
                 )
             } catch (_: SecurityException) { }
             shieldUri = uri.toString()
+            pickedUri = uri
+            clearedShield = false
         }
     }
 
@@ -86,7 +92,6 @@ fun TeamEditDialog(
                 modifier = Modifier.padding(top = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Selector de escudo
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -142,6 +147,19 @@ fun TeamEditDialog(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (shieldUri != null) {
+                            Text(
+                                text = "Quitar escudo",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.clickable {
+                                    shieldUri = null
+                                    shieldBitmap = null
+                                    pickedUri = null
+                                    clearedShield = true
+                                }
+                            )
+                        }
                     }
                 }
 
@@ -180,9 +198,12 @@ fun TeamEditDialog(
                                 name = name.trim(),
                                 category = category.trim(),
                                 season = season.trim(),
-                                shieldUri = shieldUri,
-                                isSelected = currentTeam?.isSelected ?: false
-                            )
+                                shieldUri = if (clearedShield) null else currentTeam?.shieldUri,
+                                isSelected = currentTeam?.isSelected ?: false,
+                                syncId = currentTeam?.syncId.orEmpty()
+                            ),
+                            pickedUri,
+                            clearedShield
                         )
                     }
                 }

@@ -6,6 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.local.AlhendinDatabase
+import com.luis.alhendinfc.data.sync.AttachmentParentType
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.CustomStatType
 import com.luis.alhendinfc.domain.model.EventLabels
 import com.luis.alhendinfc.domain.model.Formation
@@ -14,11 +16,15 @@ import com.luis.alhendinfc.domain.model.MatchEvent
 import com.luis.alhendinfc.domain.model.MatchPlayer
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.model.StatisticType
 import com.luis.alhendinfc.domain.model.assignPlayersToFormation
+import com.luis.alhendinfc.domain.repository.AttachmentRepository
+import com.luis.alhendinfc.domain.repository.AttachmentRepositoryImpl
 import com.luis.alhendinfc.domain.repository.CustomStatTypeRepositoryImpl
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.PlayerRepositoryImpl
+import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +39,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -58,6 +65,8 @@ class LiveMatchViewModel(
     private val matchRepository: MatchRepositoryImpl,
     private val playerRepository: PlayerRepositoryImpl,
     private val customStatRepository: CustomStatTypeRepositoryImpl,
+    private val attachmentRepository: AttachmentRepository,
+    private val calendarRepository: SeasonCalendarRepository,
     private val matchId: Int,
     private val teamId: Int
 ) : ViewModel() {
@@ -82,6 +91,26 @@ class LiveMatchViewModel(
     val customStatTypes: StateFlow<List<CustomStatType>> =
         customStatRepository.getActiveByTeam(teamId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val rivalShieldPath: StateFlow<String?> = combine(
+        match,
+        calendarRepository.getClubs(teamId),
+        attachmentRepository.getActiveByType(AttachmentParentType.OPPONENT_SHIELD)
+    ) { current, clubs, shields ->
+        val bySync = SharedMedia.byParentSyncId(shields)
+        val club = current?.opponentClubId?.let { id -> clubs.firstOrNull { it.id == id } }
+        SharedMedia.rivalDisplayPath(
+            opponentClubId = current?.opponentClubId,
+            clubLegacyUri = club?.shieldUri,
+            matchLegacyUri = current?.rivalShieldUri,
+            clubShared = club?.syncId?.let { bySync[it] }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val teamShields: StateFlow<Map<String, Attachment>> =
+        attachmentRepository.getActiveByType(AttachmentParentType.TEAM_SHIELD)
+            .map { SharedMedia.byParentSyncId(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     private val _ui = MutableStateFlow(LiveMatchUiState())
     val ui: StateFlow<LiveMatchUiState> = _ui.asStateFlow()
@@ -739,10 +768,13 @@ class LiveMatchViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     val db = AlhendinDatabase.getInstance(context.applicationContext)
                     @Suppress("UNCHECKED_CAST")
+                    val attachments = AttachmentRepositoryImpl(db.attachmentDao())
                     return LiveMatchViewModel(
                         MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
                         PlayerRepositoryImpl(db.playerDao(), db.matchDao()),
                         CustomStatTypeRepositoryImpl(db.customStatTypeDao()),
+                        attachments,
+                        SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                         matchId,
                         teamId
                     ) as T

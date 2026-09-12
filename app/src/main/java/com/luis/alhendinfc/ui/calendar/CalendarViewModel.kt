@@ -1,26 +1,37 @@
 package com.luis.alhendinfc.ui.calendar
 
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.luis.alhendinfc.data.files.AndroidAttachmentStore
+import com.luis.alhendinfc.data.files.SharedMediaWriter
 import com.luis.alhendinfc.data.local.AlhendinDatabase
+import com.luis.alhendinfc.data.sync.AttachmentParentType
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.SeasonFixture
+import com.luis.alhendinfc.domain.model.SharedMedia
+import com.luis.alhendinfc.domain.repository.AttachmentRepository
+import com.luis.alhendinfc.domain.repository.AttachmentRepositoryImpl
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class CalendarViewModel(
     private val calendarRepository: SeasonCalendarRepository,
     private val matchRepository: MatchRepositoryImpl,
+    private val attachments: AttachmentRepository,
+    private val media: SharedMediaWriter,
     private val teamId: Int
 ) : ViewModel() {
 
@@ -36,40 +47,60 @@ class CalendarViewModel(
         matchRepository.getMatchesByTeam(teamId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val opponentShields: StateFlow<Map<String, Attachment>> =
+        attachments.getActiveByType(AttachmentParentType.OPPONENT_SHIELD)
+            .map { SharedMedia.byParentSyncId(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     fun addClub(
         name: String,
         shortName: String,
         stadium: String,
         shieldUri: String?,
-        kitColors: String = ""
+        kitColors: String = "",
+        pickedShield: Uri? = shieldUri?.takeIf { SharedMedia.isPickerUri(it) }?.let(Uri::parse)
     ) {
         if (name.isBlank()) return
         viewModelScope.launch {
             val order = (clubs.value.maxOfOrNull { it.sortOrder } ?: -1) + 1
-            calendarRepository.addClub(
+            val id = calendarRepository.addClub(
                 OpponentClub(
                     teamId = teamId,
                     name = name.trim(),
                     shortName = shortName.trim(),
                     stadium = stadium.trim(),
-                    shieldUri = shieldUri?.trim()?.takeIf { uri ->
-                        val lower = uri.lowercase()
-                        !lower.startsWith("http://") && !lower.startsWith("https://") &&
-                            (lower.startsWith("content://") || lower.startsWith("file://"))
-                    },
+                    shieldUri = SharedMedia.persistableLegacyUri(shieldUri),
                     kitColors = kitColors.trim(),
                     sortOrder = order
                 )
             )
+            val created = calendarRepository.getClubOnce(id)
+            if (pickedShield != null && created != null && created.syncId.isNotBlank()) {
+                runCatching { media.setOpponentShield(created.syncId, pickedShield) }
+            }
         }
     }
 
-    fun updateClub(club: OpponentClub) {
-        viewModelScope.launch { calendarRepository.updateClub(club) }
+    fun updateClub(club: OpponentClub, shield: Uri? = null, clearShield: Boolean = false) {
+        viewModelScope.launch {
+            calendarRepository.updateClub(
+                club.copy(
+                    shieldUri = if (clearShield) null else SharedMedia.persistableLegacyUri(club.shieldUri)
+                )
+            )
+            val syncId = club.syncId.ifBlank { calendarRepository.getClubOnce(club.id)?.syncId }.orEmpty()
+            media.applyPicked(AttachmentParentType.OPPONENT_SHIELD, syncId, shield, clearShield)
+        }
     }
 
     fun deleteClub(club: OpponentClub) {
-        viewModelScope.launch { calendarRepository.deleteClub(club) }
+        viewModelScope.launch {
+            if (club.syncId.isNotBlank()) {
+                attachments.deleteByParent(AttachmentParentType.OPPONENT_SHIELD, club.syncId)
+                attachments.deleteByParent(AttachmentParentType.OPPONENT, club.syncId)
+            }
+            calendarRepository.deleteClub(club)
+        }
     }
 
     fun saveFixture(
@@ -134,6 +165,7 @@ class CalendarViewModel(
     /**
      * Abre el partido ya asociado a la jornada, o crea uno OPEN si aún no existe.
      * Reutiliza también un partido FINISHED: no se crea un segundo Match.
+     * El escudo del rival vive en OpponentClub; no se copia a Match.rivalShieldUri.
      */
     fun openOrPrepareMatch(row: FixtureRow, onReady: (matchId: Int) -> Unit) {
         viewModelScope.launch {
@@ -157,7 +189,7 @@ class CalendarViewModel(
                     matchday = matchday,
                     isHome = row.fixture.isHome,
                     opponentClubId = club?.id,
-                    rivalShieldUri = club?.shieldUri,
+                    rivalShieldUri = null,
                     status = MatchStatus.OPEN
                 )
             )
@@ -170,10 +202,14 @@ class CalendarViewModel(
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    val db = AlhendinDatabase.getInstance(context.applicationContext)
+                    val app = context.applicationContext
+                    val db = AlhendinDatabase.getInstance(app)
+                    val attachments = AttachmentRepositoryImpl(db.attachmentDao())
                     return CalendarViewModel(
                         SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                         MatchRepositoryImpl(db.matchDao(), db.matchEventDao()),
+                        attachments,
+                        SharedMediaWriter(attachments, AndroidAttachmentStore(app)),
                         teamId
                     ) as T
                 }

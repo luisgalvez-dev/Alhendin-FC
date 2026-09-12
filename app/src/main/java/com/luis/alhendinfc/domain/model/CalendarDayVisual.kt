@@ -37,24 +37,39 @@ object CalendarDayVisual {
     fun matchVisual(
         entry: CalendarDayEntry?,
         clubsById: Map<Int, OpponentClub> = emptyMap(),
-        team: Team? = null
+        team: Team? = null,
+        rivalShields: Map<String, Attachment> = emptyMap(),
+        teamShields: Map<String, Attachment> = emptyMap(),
+        clubsByMatchday: Map<Int, OpponentClub?> = emptyMap()
     ): CalendarMatchVisual? = when (entry) {
-        is CalendarDayEntry.MatchEntry -> fromMatch(entry.match, clubsById, team)
-        is CalendarDayEntry.FixtureEntry -> fromFixture(entry.row, team)
+        is CalendarDayEntry.MatchEntry -> fromMatch(
+            entry.match, clubsById, team, rivalShields, teamShields, clubsByMatchday
+        )
+        is CalendarDayEntry.FixtureEntry -> fromFixture(entry.row, team, rivalShields, teamShields)
         else -> null
     }
 
     fun fromMatch(
         match: Match,
         clubsById: Map<Int, OpponentClub> = emptyMap(),
-        team: Team? = null
+        team: Team? = null,
+        rivalShields: Map<String, Attachment> = emptyMap(),
+        teamShields: Map<String, Attachment> = emptyMap(),
+        clubsByMatchday: Map<Int, OpponentClub?> = emptyMap()
     ): CalendarMatchVisual {
-        val club = match.opponentClubId?.let { clubsById[it] }
+        val club = resolveOpponentClub(match, clubsById, clubsByMatchday)
+        val rivalPath = SharedMedia.rivalDisplayPath(
+            opponentClubId = club?.id ?: match.opponentClubId,
+            clubLegacyUri = club?.shieldUri,
+            matchLegacyUri = match.rivalShieldUri,
+            clubShared = club?.syncId?.takeIf { it.isNotBlank() }?.let { rivalShields[it] }
+        )
         val pending = visual(
             name = club?.name?.ifBlank { null } ?: match.rival,
             shortName = club?.shortName.orEmpty(),
-            shieldUri = match.rivalShieldUri?.ifBlank { null } ?: club?.shieldUri,
-            team = team
+            shieldUri = rivalPath,
+            team = team,
+            teamShared = team?.syncId?.takeIf { it.isNotBlank() }?.let { teamShields[it] }
         )
         val score = scoredFromOurPerspective(match)
         if (!isFinishedWithScore(match) || score == null) return pending
@@ -65,13 +80,22 @@ object CalendarDayVisual {
         )
     }
 
-    fun fromFixture(row: FixtureRow, team: Team? = null): CalendarMatchVisual {
+    fun fromFixture(
+        row: FixtureRow,
+        team: Team? = null,
+        rivalShields: Map<String, Attachment> = emptyMap(),
+        teamShields: Map<String, Attachment> = emptyMap()
+    ): CalendarMatchVisual {
         val club = row.club
         return visual(
             name = club?.name.orEmpty(),
             shortName = club?.shortName.orEmpty(),
-            shieldUri = club?.shieldUri,
-            team = team
+            shieldUri = SharedMedia.displayPath(
+                club?.syncId?.takeIf { it.isNotBlank() }?.let { rivalShields[it] },
+                club?.shieldUri
+            ),
+            team = team,
+            teamShared = team?.syncId?.takeIf { it.isNotBlank() }?.let { teamShields[it] }
         )
     }
 
@@ -79,7 +103,8 @@ object CalendarDayVisual {
         name: String,
         shortName: String = "",
         shieldUri: String?,
-        team: Team? = null
+        team: Team? = null,
+        teamShared: Attachment? = null
     ): CalendarMatchVisual {
         val fullName = name.trim()
         val short = shortName.trim()
@@ -95,8 +120,28 @@ object CalendarDayVisual {
             shieldUri = shieldUri?.trim()?.takeIf { it.isNotEmpty() },
             hasRival = hasRival,
             ourInitials = ownInitials(team?.name),
-            ourShieldUri = team?.shieldUri?.trim()?.takeIf { it.isNotEmpty() }
+            ourShieldUri = SharedMedia.displayPath(teamShared, team?.shieldUri)
         )
+    }
+
+    /**
+     * Misma fuente que la ficha del rival: OpponentClub del partido.
+     * Si [Match.opponentClubId] no resuelve (IDs locales distintos, 0, o partido
+     * sin club), reutiliza el club de la jornada o un único rival con el mismo nombre.
+     */
+    fun resolveOpponentClub(
+        match: Match,
+        clubsById: Map<Int, OpponentClub>,
+        clubsByMatchday: Map<Int, OpponentClub?> = emptyMap()
+    ): OpponentClub? {
+        match.opponentClubId?.takeIf { it > 0 }?.let { clubsById[it] }?.let { return it }
+        clubsByMatchday[match.matchday]?.let { return it }
+        val rival = match.rival.trim()
+        if (rival.isEmpty()) return null
+        return clubsById.values.singleOrNull { club ->
+            club.name.equals(rival, ignoreCase = true) ||
+                club.shortName.equals(rival, ignoreCase = true)
+        }
     }
 
     fun isFinishedWithScore(match: Match): Boolean =

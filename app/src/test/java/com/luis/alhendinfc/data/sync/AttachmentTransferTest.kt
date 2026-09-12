@@ -373,4 +373,69 @@ class AttachmentTransferTest {
         assertEquals("att-remote-1", downloads.single().attachmentSyncId)
         assertEquals(beforeOutbox, db.syncOutboxDao().count())
     }
+
+    @Test
+    fun teamShieldSlot_offlineGhostThenUploadPublishesWithoutLocalPath() = runTest {
+        val path = files.importStream("escudo".byteInputStream(), "alh.png", "att-shield-1")
+        repo.setSlotImage(
+            AttachmentParentType.TEAM_SHIELD,
+            "team-sync-1",
+            "image/png",
+            "alh.png",
+            path,
+            "att-shield-1"
+        )
+        val local = db.attachmentDao().getBySyncIdIncludingDeleted("att-shield-1")!!
+        assertEquals(path, local.localPath)
+        assertNull(local.remotePath)
+        SyncHooks.enqueue(SyncEntityType.ATTACHMENT, "att-shield-1")
+        engine.sync()
+        assertNull(store.get(SyncEntityType.ATTACHMENT, "att-shield-1"))
+        transfer.processAll()
+        engine.sync()
+        val doc = store.get(SyncEntityType.ATTACHMENT, "att-shield-1")!!
+        assertEquals(AttachmentParentType.TEAM_SHIELD, doc.data["parentType"])
+        assertEquals("team-sync-1", doc.data["parentSyncId"])
+        assertNotNull(doc.data["remotePath"])
+        assertFalse(doc.data.containsKey("localPath"))
+        assertTrue(StoragePath.isPortableObjectPath(doc.str("remotePath")))
+    }
+
+    @Test
+    fun opponentShieldRemote_createsDownloadNotOutboxLoop() = runTest {
+        val remote = StoragePath.blobPath("alhendin-dev", "att-op-sh", "maracena.png")
+        val src = files.importStream("png".byteInputStream(), "maracena.png", "seed-op")
+        blobs.upload(remote, java.io.File(src), "image/png")
+        val beforeOutbox = db.syncOutboxDao().count()
+        engine.applyRemoteCollection(
+            SyncEntityType.ATTACHMENT,
+            listOf(
+                CloudDoc(
+                    "att-op-sh",
+                    mapOf(
+                        "syncId" to "att-op-sh",
+                        "parentType" to AttachmentParentType.OPPONENT_SHIELD,
+                        "parentSyncId" to "club-sync",
+                        "mime" to "image/png",
+                        "name" to "maracena.png",
+                        "remotePath" to remote,
+                        "createdAt" to 10L,
+                        "updatedAt" to 10L,
+                        "deletedAt" to null
+                    )
+                )
+            )
+        )
+        val stored = db.attachmentDao().getBySyncIdIncludingDeleted("att-op-sh")!!
+        assertNull(stored.localPath)
+        val downloads = db.transferJobDao().getAll().filter { it.kind == TransferKind.DOWNLOAD }
+        assertEquals(1, downloads.size)
+        assertEquals(beforeOutbox, db.syncOutboxDao().count())
+        val updatedAt = stored.updatedAt
+        transfer.processAll()
+        val after = db.attachmentDao().getBySyncIdIncludingDeleted("att-op-sh")!!
+        assertNotNull(after.localPath)
+        assertEquals(updatedAt, after.updatedAt)
+        assertEquals(beforeOutbox, db.syncOutboxDao().count())
+    }
 }

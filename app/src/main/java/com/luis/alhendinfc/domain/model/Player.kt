@@ -12,5 +12,6 @@ data class Player(
     val weight: Int = 0,
     val laterality: Laterality = Laterality.DERECHA,
     val isActive: Boolean = true,
-    val observations: String = ""
+    val observations: String = "",
+    val syncId: String = ""
 )

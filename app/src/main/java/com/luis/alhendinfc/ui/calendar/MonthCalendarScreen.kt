@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.CalendarDayContent
 import com.luis.alhendinfc.domain.model.CalendarDayEntry
 import com.luis.alhendinfc.domain.model.CalendarDayVisual
@@ -83,6 +84,9 @@ fun MonthCalendarScreen(
     visibleMonth: YearMonth,
     dayContents: Map<Long, CalendarDayContent>,
     clubs: List<OpponentClub> = emptyList(),
+    fixtures: List<FixtureRow> = emptyList(),
+    rivalShields: Map<String, Attachment> = emptyMap(),
+    teamShields: Map<String, Attachment> = emptyMap(),
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onGoToToday: () -> Unit,
@@ -95,6 +99,9 @@ fun MonthCalendarScreen(
 ) {
     val today = remember { LocalDate.now() }
     val clubsById = remember(clubs) { clubs.associateBy { it.id } }
+    val clubsByMatchday = remember(fixtures) {
+        fixtures.associate { it.fixture.matchday to it.club }
+    }
     var pendingEmptyDay by remember { mutableStateOf<Long?>(null) }
     var pendingChoice by remember { mutableStateOf<CalendarDayContent?>(null) }
 
@@ -247,7 +254,10 @@ fun MonthCalendarScreen(
                                     isToday = date == today,
                                     content = dayContents[epoch],
                                     clubsById = clubsById,
+                                    clubsByMatchday = clubsByMatchday,
                                     team = team,
+                                    rivalShields = rivalShields,
+                                    teamShields = teamShields,
                                     onClick = {
                                         val day = dayContents[epoch]
                                             ?: CalendarDayContent(epoch, null, null)
@@ -291,10 +301,20 @@ private fun MonthDayCell(
     isToday: Boolean,
     content: CalendarDayContent?,
     clubsById: Map<Int, OpponentClub>,
+    clubsByMatchday: Map<Int, OpponentClub?>,
     team: Team?,
+    rivalShields: Map<String, Attachment>,
+    teamShields: Map<String, Attachment>,
     onClick: () -> Unit
 ) {
-    val matchVisual = CalendarDayVisual.matchVisual(content?.matchOrFixture, clubsById, team)
+    val matchVisual = CalendarDayVisual.matchVisual(
+        content?.matchOrFixture,
+        clubsById,
+        team,
+        rivalShields,
+        teamShields,
+        clubsByMatchday
+    )
     val training = content?.training
     val border = when {
         isToday -> GreenLime
@@ -359,21 +379,21 @@ private fun MonthDayCell(
             val cellHeight = maxHeight
             val shortest = minOf(cellWidth, cellHeight)
             val shieldSize = when {
-                shortest >= 72.dp -> 48.dp
-                shortest >= 60.dp -> 44.dp
-                shortest >= 48.dp -> 42.dp
-                else -> (shortest * 0.78f).coerceAtLeast(32.dp)
-            }.coerceAtMost(minOf(cellWidth * 0.88f, cellHeight * 0.72f, 52.dp))
+                shortest >= 72.dp -> 58.dp
+                shortest >= 60.dp -> 52.dp
+                shortest >= 48.dp -> 48.dp
+                else -> (shortest * 0.88f).coerceAtLeast(36.dp)
+            }.coerceAtMost(minOf(cellWidth * 0.92f, cellHeight * 0.80f, 64.dp))
             val nameSize = when {
                 cellWidth >= 72.dp -> 14.sp
                 cellWidth >= 52.dp -> 13.sp
                 else -> 12.sp
             }
             val resultShield = minOf(
-                cellWidth * 0.30f,
-                cellHeight * 0.52f,
-                if (cellWidth >= 96.dp) 42.dp else if (cellWidth >= 72.dp) 38.dp else 34.dp
-            ).coerceIn(22.dp, 42.dp)
+                cellWidth * 0.34f,
+                cellHeight * 0.58f,
+                if (cellWidth >= 96.dp) 50.dp else if (cellWidth >= 72.dp) 46.dp else 40.dp
+            ).coerceIn(26.dp, 52.dp)
             val scoreSize = when {
                 cellWidth >= 72.dp -> 18.sp
                 else -> 16.sp
@@ -497,11 +517,7 @@ private fun CalendarShieldBadge(
         )
     }
     Box(
-        modifier = Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(GreenAccent.copy(alpha = 0.22f))
-            .border(1.dp, GreenAccent.copy(alpha = 0.45f), CircleShape),
+        modifier = Modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
         if (bitmap != null) {
@@ -509,18 +525,25 @@ private fun CalendarShieldBadge(
                 bitmap = bitmap!!,
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(size * 0.08f)
+                modifier = Modifier.fillMaxSize()
             )
         } else {
-            Text(
-                initials,
-                fontWeight = FontWeight.Bold,
-                color = GreenMint,
-                fontSize = (size.value * 0.32f).sp,
-                maxLines = 1
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .background(GreenAccent.copy(alpha = 0.22f))
+                    .border(1.dp, GreenAccent.copy(alpha = 0.45f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    initials,
+                    fontWeight = FontWeight.Bold,
+                    color = GreenMint,
+                    fontSize = (size.value * 0.32f).sp,
+                    maxLines = 1
+                )
+            }
         }
     }
 }

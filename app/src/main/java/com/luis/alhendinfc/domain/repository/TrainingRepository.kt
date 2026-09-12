@@ -18,6 +18,15 @@ interface AttachmentRepository {
     suspend fun deleteByParent(parentType: String, parentSyncId: String)
     suspend fun setTaskImage(taskSyncId: String, mimeType: String, name: String, localPath: String)
     suspend fun clearTaskImages(taskSyncId: String)
+    suspend fun setSlotImage(
+        parentType: String,
+        parentSyncId: String,
+        mimeType: String,
+        name: String,
+        localPath: String,
+        syncId: String = ""
+    ): Int
+    suspend fun clearSlot(parentType: String, parentSyncId: String)
 }
 
 interface TrainingRepository {

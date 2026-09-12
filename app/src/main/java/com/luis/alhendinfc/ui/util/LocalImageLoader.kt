@@ -22,7 +22,7 @@ object LocalImageLoader {
     /** ~24 MB: tablets con varias fotos/escudos en pantalla. */
     private val cache = object : LruCache<String, ImageBitmap>(24 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap): Int =
-            (value.width * value.height * 2) / 1024 // RGB_565 ~2 bytes/px
+            (value.width * value.height * 4) / 1024
     }
 
     suspend fun load(
@@ -58,7 +58,7 @@ object LocalImageLoader {
                 val sample = calculateInSampleSize(bounds.outWidth, bounds.outHeight, maxSidePx)
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.RGB_565
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
                 val bmp = open()?.use { BitmapFactory.decodeStream(it, null, opts) }
                     ?: return@withContext null

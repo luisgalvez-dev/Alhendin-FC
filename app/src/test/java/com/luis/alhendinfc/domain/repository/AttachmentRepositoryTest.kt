@@ -2,6 +2,7 @@ package com.luis.alhendinfc.domain.repository
 
 import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.domain.model.Attachment
+import com.luis.alhendinfc.domain.model.SharedMedia
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -69,5 +70,59 @@ class AttachmentRepositoryTest {
         assertEquals(listOf("b.jpg"), after.map { it.name })
         assertEquals(1, dao.getAllOnce().count { it.deletedAt != null })
         assertEquals(1, repo.getActiveByType(AttachmentParentType.OPPONENT).first().size)
+    }
+
+    @Test
+    fun mediaSlots_oneActivePerParent_playersStayIndependent() = runTest {
+        val dao = InMemoryAttachmentDao()
+        val repo = AttachmentRepositoryImpl(dao)
+        repo.setSlotImage(AttachmentParentType.PLAYER_PHOTO, "player-a", "image/jpeg", "a.jpg", "/files/a.jpg")
+        repo.setSlotImage(AttachmentParentType.PLAYER_PHOTO, "player-b", "image/png", "b.png", "/files/b.png")
+        repo.setSlotImage(AttachmentParentType.PLAYER_PHOTO, "player-a", "image/png", "a2.png", "/files/a2.png")
+        val photos = repo.getActiveByType(AttachmentParentType.PLAYER_PHOTO).first()
+        assertEquals(2, photos.size)
+        val byParent = SharedMedia.byParentSyncId(photos)
+        assertEquals("a2.png", byParent["player-a"]?.name)
+        assertEquals("b.png", byParent["player-b"]?.name)
+        assertEquals(1, dao.getAllOnce().count { it.parentSyncId == "player-a" && it.deletedAt != null })
+    }
+
+    @Test
+    fun teamAndOpponentSlots_replaceAndClearIndependently() = runTest {
+        val dao = InMemoryAttachmentDao()
+        val repo = AttachmentRepositoryImpl(dao)
+        repo.setSlotImage(AttachmentParentType.TEAM_SHIELD, "team-1", "image/png", "t.png", "/t.png")
+        repo.setSlotImage(AttachmentParentType.OPPONENT_SHIELD, "club-a", "image/png", "a.png", "/a.png")
+        repo.setSlotImage(AttachmentParentType.OPPONENT_SHIELD, "club-b", "image/png", "b.png", "/b.png")
+        repo.setSlotImage(AttachmentParentType.OPPONENT_SHIELD, "club-a", "image/jpeg", "a2.jpg", "/a2.jpg")
+        assertEquals(1, repo.getActiveByType(AttachmentParentType.TEAM_SHIELD).first().size)
+        val rivals = SharedMedia.byParentSyncId(repo.getActiveByType(AttachmentParentType.OPPONENT_SHIELD).first())
+        assertEquals("a2.jpg", rivals["club-a"]?.name)
+        assertEquals("b.png", rivals["club-b"]?.name)
+        repo.clearSlot(AttachmentParentType.TEAM_SHIELD, "team-1")
+        assertTrue(repo.getActiveByType(AttachmentParentType.TEAM_SHIELD).first().isEmpty())
+        assertEquals(2, repo.getActiveByType(AttachmentParentType.OPPONENT_SHIELD).first().size)
+        repo.clearSlot(AttachmentParentType.OPPONENT_SHIELD, "club-a")
+        assertEquals(listOf("b.png"), repo.getActiveByType(AttachmentParentType.OPPONENT_SHIELD).first().map { it.name })
+    }
+
+    @Test
+    fun slotRejectsPdf() = runTest {
+        val repo = AttachmentRepositoryImpl(InMemoryAttachmentDao())
+        try {
+            repo.setSlotImage(AttachmentParentType.PLAYER_PHOTO, "player-a", "application/pdf", "x.pdf", "/x.pdf")
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun slotRejectsTaskParentType() = runTest {
+        val repo = AttachmentRepositoryImpl(InMemoryAttachmentDao())
+        try {
+            repo.setSlotImage(AttachmentParentType.TASK, "task-1", "image/jpeg", "a.jpg", "/a.jpg")
+            throw AssertionError("expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
     }
 }

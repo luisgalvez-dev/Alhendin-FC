@@ -1,6 +1,7 @@
 package com.luis.alhendinfc.ui.players
 
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -59,7 +60,8 @@ import com.luis.alhendinfc.ui.util.LocalImageLoader
 fun PlayerEditDialog(
     currentPlayer: Player?,
     teamId: Int,
-    onConfirm: (Player) -> Unit,
+    previewPhotoPath: String? = currentPlayer?.photoUri,
+    onConfirm: (Player, photo: Uri?, clearPhoto: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -70,8 +72,10 @@ fun PlayerEditDialog(
     var position by remember { mutableStateOf(currentPlayer?.position ?: PlayerPosition.MEDIOCENTRO_DEFENSIVO) }
     var isActive by remember { mutableStateOf(currentPlayer?.isActive ?: true) }
     var observations by remember { mutableStateOf(currentPlayer?.observations ?: "") }
-    var photoUri by remember { mutableStateOf(currentPlayer?.photoUri) }
+    var photoUri by remember { mutableStateOf(previewPhotoPath) }
     var photoBitmap by remember(photoUri) { mutableStateOf<ImageBitmap?>(null) }
+    var pickedUri by remember { mutableStateOf<Uri?>(null) }
+    var clearedPhoto by remember { mutableStateOf(false) }
 
     LaunchedEffect(photoUri) {
         photoBitmap = LocalImageLoader.load(context, photoUri, maxSidePx = 384)
@@ -88,6 +92,8 @@ fun PlayerEditDialog(
                 )
             } catch (_: SecurityException) { }
             photoUri = uri.toString()
+            pickedUri = uri
+            clearedPhoto = false
         }
     }
 
@@ -186,6 +192,19 @@ fun PlayerEditDialog(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                if (photoUri != null) {
+                                    Text(
+                                        text = "Quitar foto",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.clickable {
+                                            photoUri = null
+                                            photoBitmap = null
+                                            pickedUri = null
+                                            clearedPhoto = true
+                                        }
+                                    )
+                                }
                             }
                         }
 
@@ -292,14 +311,17 @@ fun PlayerEditDialog(
                                         alias = alias.trim(),
                                         position = position,
                                         jerseyNumber = jerseyNumber.toIntOrNull() ?: 0,
-                                        photoUri = photoUri,
+                                        photoUri = if (clearedPhoto) null else currentPlayer?.photoUri,
                                         height = currentPlayer?.height ?: 0,
                                         weight = currentPlayer?.weight ?: 0,
                                         laterality = currentPlayer?.laterality
                                             ?: com.luis.alhendinfc.domain.model.Laterality.DERECHA,
                                         isActive = isActive,
-                                        observations = observations.trim()
-                                    )
+                                        observations = observations.trim(),
+                                        syncId = currentPlayer?.syncId.orEmpty()
+                                    ),
+                                    pickedUri,
+                                    clearedPhoto
                                 )
                             }
                         },

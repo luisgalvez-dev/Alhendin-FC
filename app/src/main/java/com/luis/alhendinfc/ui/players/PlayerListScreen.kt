@@ -63,7 +63,9 @@ fun PlayerListScreen(
     team: Team?,
     onAddPlayer: () -> Unit,
     onPlayerClick: (Player) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    photoPaths: Map<Int, String?> = emptyMap(),
+    teamShieldPath: String? = team?.shieldUri
 ) {
     Column(
         modifier = Modifier
@@ -103,7 +105,7 @@ fun PlayerListScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    TeamAvatar(team = team, size = 36)
+                    TeamAvatar(team = team, size = 36, shieldPath = teamShieldPath)
                 }
                 Spacer(modifier = Modifier.width(12.dp))
             }
@@ -123,6 +125,7 @@ fun PlayerListScreen(
             items(players, key = { it.id }) { player ->
                 PlayerCard(
                     player = player,
+                    photoPath = photoPaths[player.id] ?: player.photoUri,
                     onClick = { onPlayerClick(player) }
                 )
             }
@@ -182,13 +185,14 @@ private fun AddPlayerCard(onClick: () -> Unit) {
 @Composable
 private fun PlayerCard(
     player: Player,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    photoPath: String? = player.photoUri
 ) {
     val context = LocalContext.current
-    var bitmap by remember(player.photoUri) { mutableStateOf<ImageBitmap?>(null) }
+    var bitmap by remember(photoPath) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(player.photoUri) {
-        bitmap = LocalImageLoader.load(context, player.photoUri, maxSidePx = 256)
+    LaunchedEffect(photoPath) {
+        bitmap = LocalImageLoader.load(context, photoPath, maxSidePx = 256)
     }
 
     Card(

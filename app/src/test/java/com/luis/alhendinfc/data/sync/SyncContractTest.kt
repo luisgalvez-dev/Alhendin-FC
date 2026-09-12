@@ -143,7 +143,10 @@ class SyncContractTest {
         val hasRoomEntity = File("app/src/main/java/com/luis/alhendinfc/data/local/AttachmentEntity.kt").exists() ||
             File("src/main/java/com/luis/alhendinfc/data/local/AttachmentEntity.kt").exists()
         assertTrue(hasRoomEntity)
-        assertTrue(AttachmentParentType.KNOWN.containsAll(listOf("TRAINING", "TASK", "MATCH", "OPPONENT", "BOARD")))
+        assertTrue(AttachmentParentType.KNOWN.containsAll(listOf(
+            "TRAINING", "TASK", "MATCH", "OPPONENT", "BOARD",
+            "PLAYER_PHOTO", "TEAM_SHIELD", "OPPONENT_SHIELD"
+        )))
     }
 
     @Test

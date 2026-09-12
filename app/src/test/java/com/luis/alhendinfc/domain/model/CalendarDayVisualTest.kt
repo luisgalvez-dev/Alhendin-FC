@@ -1,5 +1,6 @@
 package com.luis.alhendinfc.domain.model
 
+import com.luis.alhendinfc.data.sync.AttachmentParentType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -259,5 +260,156 @@ class CalendarDayVisualTest {
         val visual = CalendarDayVisual.fromMatch(match)
         assertFalse(visual.showsResult)
         assertEquals(CalendarMatchMode.PENDING, visual.mode)
+    }
+
+    @Test
+    fun calendarResolver_prefersOpponentSharedShieldOverLegacyAndMatchCopy() {
+        val club = OpponentClub(
+            id = 9,
+            teamId = 1,
+            name = "U.D. Maracena",
+            shortName = "Maracena",
+            shieldUri = "content://legacy-club.png",
+            syncId = "club-sync"
+        )
+        val match = Match(
+            id = 20,
+            teamId = 1,
+            rival = "U.D. Maracena",
+            date = "14/09/2026",
+            opponentClubId = 9,
+            rivalShieldUri = "content://match-copy.png"
+        )
+        val shared = Attachment(
+            syncId = "att-club",
+            parentType = AttachmentParentType.OPPONENT_SHIELD,
+            parentSyncId = "club-sync",
+            mimeType = "image/png",
+            name = "escudo.png",
+            localPath = "/data/files/maracena.png"
+        )
+        val visual = CalendarDayVisual.fromMatch(
+            match,
+            mapOf(9 to club),
+            rivalShields = mapOf("club-sync" to shared)
+        )
+        assertEquals("/data/files/maracena.png", visual.shieldUri)
+    }
+
+    @Test
+    fun matchWithoutClub_keepsLegacyRivalShield() {
+        val match = Match(
+            id = 21,
+            teamId = 1,
+            rival = "Amistoso",
+            date = "14/09/2026",
+            opponentClubId = null,
+            rivalShieldUri = "content://amistoso.png"
+        )
+        val visual = CalendarDayVisual.fromMatch(match)
+        assertEquals("content://amistoso.png", visual.shieldUri)
+    }
+
+    @Test
+    fun ownTeamSharedShield_beatsLegacy() {
+        val team = Team(
+            id = 1,
+            name = "Alhendín FC",
+            category = "",
+            season = "",
+            shieldUri = "content://old-alh.png",
+            syncId = "team-sync"
+        )
+        val match = Match(
+            id = 22,
+            teamId = 1,
+            rival = "Maracena",
+            date = "20/09/2026",
+            isHome = true,
+            status = MatchStatus.FINISHED,
+            homeScore = 1,
+            awayScore = 0
+        )
+        val shared = Attachment(
+            parentType = AttachmentParentType.TEAM_SHIELD,
+            parentSyncId = "team-sync",
+            mimeType = "image/png",
+            name = "alh.png",
+            localPath = "/data/files/alh.png"
+        )
+        val visual = CalendarDayVisual.fromMatch(
+            match,
+            team = team,
+            teamShields = mapOf("team-sync" to shared)
+        )
+        assertEquals("/data/files/alh.png", visual.ourShieldUri)
+    }
+
+    @Test
+    fun matchWithoutClubId_reusesFixtureClubSharedShield() {
+        val club = OpponentClub(
+            id = 3,
+            teamId = 1,
+            name = "U.D. Maracena",
+            shortName = "Maracena",
+            shieldUri = null,
+            syncId = "club-sync"
+        )
+        val match = Match(
+            id = 30,
+            teamId = 1,
+            rival = "U.D. Maracena",
+            date = "14/09/2026",
+            matchday = 4,
+            opponentClubId = null,
+            rivalShieldUri = null
+        )
+        val shared = Attachment(
+            parentType = AttachmentParentType.OPPONENT_SHIELD,
+            parentSyncId = "club-sync",
+            mimeType = "image/png",
+            name = "escudo.png",
+            localPath = "/data/files/maracena.png"
+        )
+        val visual = CalendarDayVisual.fromMatch(
+            match,
+            clubsById = mapOf(3 to club),
+            rivalShields = mapOf("club-sync" to shared),
+            clubsByMatchday = mapOf(4 to club)
+        )
+        assertEquals("/data/files/maracena.png", visual.shieldUri)
+        assertEquals("Maracena", visual.displayName)
+    }
+
+    @Test
+    fun matchWithUnknownClubId_findsClubByRivalNameForSharedShield() {
+        val club = OpponentClub(
+            id = 3,
+            teamId = 1,
+            name = "U.D. Maracena",
+            shortName = "Maracena",
+            syncId = "club-sync"
+        )
+        val match = Match(
+            id = 31,
+            teamId = 1,
+            rival = "U.D. Maracena",
+            date = "14/09/2026",
+            opponentClubId = 99,
+            rivalShieldUri = "content://match-copy.png"
+        )
+        val shared = Attachment(
+            parentType = AttachmentParentType.OPPONENT_SHIELD,
+            parentSyncId = "club-sync",
+            mimeType = "image/png",
+            name = "escudo.png",
+            localPath = "/data/files/maracena.png"
+        )
+        val visual = CalendarDayVisual.fromMatch(
+            match,
+            clubsById = mapOf(3 to club),
+            rivalShields = mapOf("club-sync" to shared)
+        )
+        assertEquals("/data/files/maracena.png", visual.shieldUri)
     }
 }

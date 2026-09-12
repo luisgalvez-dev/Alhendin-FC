@@ -181,7 +181,6 @@ fun MatchSetupScreen(
         time = row.fixture.time.ifBlank { time }
         isHome = row.fixture.isHome
         opponentClubId = club?.id
-        rivalShieldUri = club?.shieldUri
         lastAutoFilledMatchday = day
     }
 

@@ -6,13 +6,18 @@ object AttachmentParentType {
     const val MATCH = "MATCH"
     const val OPPONENT = "OPPONENT"
     const val BOARD = "BOARD"
+    const val PLAYER_PHOTO = "PLAYER_PHOTO"
+    const val TEAM_SHIELD = "TEAM_SHIELD"
+    const val OPPONENT_SHIELD = "OPPONENT_SHIELD"
 
-    val KNOWN = setOf(TRAINING, TASK, MATCH, OPPONENT, BOARD)
+    val MEDIA_SLOTS = setOf(PLAYER_PHOTO, TEAM_SHIELD, OPPONENT_SHIELD)
+    val KNOWN = setOf(TRAINING, TASK, MATCH, OPPONENT, BOARD) + MEDIA_SLOTS
 }
 
 /**
  * Contrato de Attachment. Room persiste [com.luis.alhendinfc.data.local.AttachmentEntity].
- * parentType: TRAINING, TASK, MATCH, OPPONENT, BOARD.
+ * parentType: TRAINING, TASK, MATCH, OPPONENT, BOARD,
+ * PLAYER_PHOTO, TEAM_SHIELD, OPPONENT_SHIELD.
  * [localPath] es solo local; [remotePath] es la ruta de Storage.
  */
 data class AttachmentContract(

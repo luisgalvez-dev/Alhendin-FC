@@ -139,7 +139,9 @@ fun LiveMatchScreen(
     onClearFeedback: () -> Unit,
     onUndo: () -> Unit,
     onFinish: (onDone: () -> Unit) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    rivalShieldPath: String? = match.rivalShieldUri,
+    teamShieldPath: String? = team?.shieldUri
 ) {
     val teamName = team?.name ?: "Equipo"
     val rivalName = match.rival.ifBlank { "Rival" }
@@ -179,7 +181,7 @@ fun LiveMatchScreen(
                 val convUri = try {
                     ConvocatoriaPdfExporter(context).export(
                         match = match,
-                        team = team,
+                        team = team?.copy(shieldUri = teamShieldPath ?: team.shieldUri),
                         players = allPlayers,
                         callupMap = callupMap
                     )
@@ -395,7 +397,7 @@ fun LiveMatchScreen(
             TopBar(
                 teamName = teamName,
                 rivalName = rivalName,
-                rivalShieldUri = match.rivalShieldUri,
+                rivalShieldUri = rivalShieldPath,
                 period = ui.period,
                 clock = clock,
                 teamGoals = ui.teamGoals,

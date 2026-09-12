@@ -59,10 +59,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.HomeLayoutConfig
 import com.luis.alhendinfc.domain.model.HomeModule
 import com.luis.alhendinfc.domain.model.Match
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.team.TeamEditDialog
 import com.luis.alhendinfc.ui.theme.AmberAccent
@@ -89,9 +91,10 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToLive: (matchId: Int) -> Unit,
     onNavigateToNextMatch: () -> Unit,
-    onAddTeam: (Team) -> Unit,
+    onAddTeam: (Team, android.net.Uri?, Boolean) -> Unit,
     onSelectTeam: (Int) -> Unit,
-    connectionLabel: String? = null
+    connectionLabel: String? = null,
+    teamShields: Map<String, Attachment> = emptyMap()
 ) {
     var showAddDialog by remember { mutableStateOf(false) }
     val hasTeam = selectedTeam != null
@@ -106,8 +109,8 @@ fun HomeScreen(
     if (showAddDialog) {
         TeamEditDialog(
             currentTeam = null,
-            onConfirm = { newTeam ->
-                onAddTeam(newTeam)
+            onConfirm = { newTeam, shield, clear ->
+                onAddTeam(newTeam, shield, clear)
                 showAddDialog = false
             },
             onDismiss = { showAddDialog = false }
@@ -136,7 +139,8 @@ fun HomeScreen(
                 teams = teams,
                 selectedTeam = selectedTeam,
                 onSelectTeam = onSelectTeam,
-                onAddTeam = { showAddDialog = true }
+                onAddTeam = { showAddDialog = true },
+                teamShields = teamShields
             )
 
             if (!connectionLabel.isNullOrBlank()) {
@@ -327,7 +331,8 @@ private fun TeamSelectorBar(
     teams: List<Team>,
     selectedTeam: Team?,
     onSelectTeam: (Int) -> Unit,
-    onAddTeam: () -> Unit
+    onAddTeam: () -> Unit,
+    teamShields: Map<String, Attachment> = emptyMap()
 ) {
     var expanded by remember { mutableStateOf(false) }
     val teamName = selectedTeam?.name ?: "Añadir equipo"
@@ -357,7 +362,14 @@ private fun TeamSelectorBar(
                     .clickable { if (teams.isNotEmpty()) expanded = true }
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             ) {
-                TeamAvatar(team = selectedTeam, size = 40)
+                TeamAvatar(
+                    team = selectedTeam,
+                    size = 40,
+                    shieldPath = SharedMedia.displayPath(
+                        selectedTeam?.syncId?.let { teamShields[it] },
+                        selectedTeam?.shieldUri
+                    )
+                )
 
                 Spacer(modifier = Modifier.width(10.dp))
 
@@ -390,7 +402,11 @@ private fun TeamSelectorBar(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                TeamAvatar(team = team, size = 32)
+                                TeamAvatar(
+                                    team = team,
+                                    size = 32,
+                                    shieldPath = SharedMedia.displayPath(teamShields[team.syncId], team.shieldUri)
+                                )
                                 Text(team.name)
                             }
                         },
@@ -444,12 +460,13 @@ private fun TeamSelectorBar(
 }
 
 @Composable
-fun TeamAvatar(team: Team?, size: Int) {
+fun TeamAvatar(team: Team?, size: Int, shieldPath: String? = null) {
     val context = LocalContext.current
-    var bitmap by remember(team?.shieldUri) { mutableStateOf<ImageBitmap?>(null) }
+    val path = shieldPath ?: team?.shieldUri
+    var bitmap by remember(path) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(team?.shieldUri) {
-        bitmap = LocalImageLoader.load(context, team?.shieldUri, maxSidePx = (size * 3).coerceAtLeast(128))
+    LaunchedEffect(path) {
+        bitmap = LocalImageLoader.load(context, path, maxSidePx = (size * 3).coerceAtLeast(128))
     }
 
     Box(

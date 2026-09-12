@@ -48,18 +48,20 @@ import com.luis.alhendinfc.ui.home.TeamAvatar
 @Composable
 fun TeamScreen(
     team: Team?,
-    onSaveTeam: (Team) -> Unit,
+    onSaveTeam: (Team, android.net.Uri?, Boolean) -> Unit,
     onBack: () -> Unit,
     onViewPlayers: () -> Unit = {},
-    playerCount: Int = 0
+    playerCount: Int = 0,
+    shieldPath: String? = team?.shieldUri
 ) {
     var showEditDialog by remember { mutableStateOf(false) }
 
     if (showEditDialog) {
         TeamEditDialog(
             currentTeam = team,
-            onConfirm = { updatedTeam ->
-                onSaveTeam(updatedTeam)
+            previewShieldPath = shieldPath,
+            onConfirm = { updatedTeam, shield, clear ->
+                onSaveTeam(updatedTeam, shield, clear)
                 showEditDialog = false
             },
             onDismiss = { showEditDialog = false }
@@ -103,6 +105,7 @@ fun TeamScreen(
             TeamInfoPanel(
                 team = team,
                 playerCount = playerCount,
+                shieldPath = shieldPath,
                 onEditClick = { showEditDialog = true },
                 modifier = Modifier
                     .weight(0.38f)
@@ -125,7 +128,8 @@ private fun TeamInfoPanel(
     team: Team?,
     playerCount: Int,
     onEditClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    shieldPath: String? = team?.shieldUri
 ) {
     Card(
         modifier = modifier,
@@ -174,7 +178,7 @@ private fun TeamInfoPanel(
             ) {
                 // Escudo — imagen real si existe, iniciales si no
                 Box(modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    TeamAvatar(team = team, size = 88)
+                    TeamAvatar(team = team, size = 88, shieldPath = shieldPath)
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))

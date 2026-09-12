@@ -6,5 +6,6 @@ data class Team(
     val category: String,
     val season: String,
     val shieldUri: String? = null,
-    val isSelected: Boolean = false
+    val isSelected: Boolean = false,
+    val syncId: String = ""
 )

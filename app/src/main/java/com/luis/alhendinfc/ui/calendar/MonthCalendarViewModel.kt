@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.local.AlhendinDatabase
+import com.luis.alhendinfc.data.sync.AttachmentParentType
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.CalendarDate
 import com.luis.alhendinfc.domain.model.CalendarDayContent
 import com.luis.alhendinfc.domain.model.CalendarMonthRules
@@ -13,7 +15,10 @@ import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.OpponentClub
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.model.Training
+import com.luis.alhendinfc.domain.repository.AttachmentRepository
+import com.luis.alhendinfc.domain.repository.AttachmentRepositoryImpl
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
 import com.luis.alhendinfc.domain.repository.TrainingRepositoryImpl
@@ -22,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -29,6 +35,7 @@ class MonthCalendarViewModel(
     private val calendarRepository: SeasonCalendarRepository,
     private val matchRepository: MatchRepositoryImpl,
     private val trainingRepository: TrainingRepositoryImpl,
+    private val attachments: AttachmentRepository,
     private val teamId: Int
 ) : ViewModel() {
 
@@ -50,6 +57,16 @@ class MonthCalendarViewModel(
     val clubs: StateFlow<List<OpponentClub>> =
         calendarRepository.getClubs(teamId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val opponentShields: StateFlow<Map<String, Attachment>> =
+        attachments.getActiveByType(AttachmentParentType.OPPONENT_SHIELD)
+            .map { SharedMedia.byParentSyncId(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    val teamShields: StateFlow<Map<String, Attachment>> =
+        attachments.getActiveByType(AttachmentParentType.TEAM_SHIELD)
+            .map { SharedMedia.byParentSyncId(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     val dayContents: StateFlow<Map<Long, CalendarDayContent>> =
         combine(matches, fixtures, trainings) { matchList, fixtureList, trainingList ->
@@ -106,7 +123,7 @@ class MonthCalendarViewModel(
                     matchday = matchday,
                     isHome = row.fixture.isHome,
                     opponentClubId = club?.id,
-                    rivalShieldUri = club?.shieldUri,
+                    rivalShieldUri = null,
                     status = MatchStatus.OPEN
                 )
             )
@@ -131,6 +148,7 @@ class MonthCalendarViewModel(
                             db.seasonFixtureDao(),
                             db.attachmentDao()
                         ),
+                        AttachmentRepositoryImpl(db.attachmentDao()),
                         teamId
                     ) as T
                 }

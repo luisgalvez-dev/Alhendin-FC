@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.luis.alhendinfc.data.files.AndroidAttachmentStore
+import com.luis.alhendinfc.data.files.SharedMediaWriter
 import com.luis.alhendinfc.data.local.AlhendinDatabase
 import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.domain.model.Attachment
@@ -15,6 +16,7 @@ import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.OpponentPlayer
 import com.luis.alhendinfc.domain.model.RivalAnalysis
 import com.luis.alhendinfc.domain.model.RivalLink
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.repository.AttachmentRepository
 import com.luis.alhendinfc.domain.repository.AttachmentRepositoryImpl
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
@@ -28,6 +30,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -38,11 +41,20 @@ class RivalDetailViewModel(
     private val attachmentRepository: AttachmentRepository,
     private val matchRepository: MatchRepositoryImpl,
     private val fileStore: AndroidAttachmentStore,
+    private val media: SharedMediaWriter,
     private val clubId: Int
 ) : ViewModel() {
 
     val club: StateFlow<OpponentClub?> =
         calendarRepository.getClub(clubId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val opponentShield: StateFlow<Attachment?> =
+        club.flatMapLatest { current ->
+            val syncId = current?.syncId.orEmpty()
+            if (syncId.isBlank()) flowOf(emptyList())
+            else attachmentRepository.getActiveByParent(AttachmentParentType.OPPONENT_SHIELD, syncId)
+        }.map { it.firstOrNull() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val analysis: StateFlow<RivalAnalysis?> =
@@ -78,8 +90,13 @@ class RivalDetailViewModel(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun saveClub(club: OpponentClub) {
-        viewModelScope.launch { calendarRepository.updateClub(club) }
+    fun saveClub(club: OpponentClub, shield: Uri? = null, clearShield: Boolean = false) {
+        viewModelScope.launch {
+            val cleaned = club.copy(shieldUri = if (clearShield) null else SharedMedia.persistableLegacyUri(club.shieldUri))
+            calendarRepository.updateClub(cleaned)
+            val syncId = club.syncId.ifBlank { calendarRepository.getClubOnce(club.id)?.syncId }.orEmpty()
+            media.applyPicked(AttachmentParentType.OPPONENT_SHIELD, syncId, shield, clearShield)
+        }
     }
 
     fun saveAnalysis(analysis: RivalAnalysis) {
@@ -158,12 +175,15 @@ class RivalDetailViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
                     val app = context.applicationContext
                     val db = AlhendinDatabase.getInstance(app)
+                    val attachments = AttachmentRepositoryImpl(db.attachmentDao())
+                    val files = AndroidAttachmentStore(app)
                     return RivalDetailViewModel(
                         SeasonCalendarRepository(db.opponentClubDao(), db.seasonFixtureDao()),
                         RivalRepository(db.rivalAnalysisDao(), db.rivalLinkDao(), db.opponentPlayerDao()),
-                        AttachmentRepositoryImpl(db.attachmentDao()),
+                        attachments,
                         MatchRepositoryImpl(db.matchDao(), db.matchEventDao(), db.attachmentDao()),
-                        AndroidAttachmentStore(app),
+                        files,
+                        SharedMediaWriter(attachments, files),
                         clubId
                     ) as T
                 }

@@ -9,6 +9,7 @@ import com.luis.alhendinfc.data.sync.AttachmentParentType
 import com.luis.alhendinfc.data.sync.TransferHooks
 import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.AttachmentRules
+import com.luis.alhendinfc.domain.model.SharedMedia
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -80,6 +81,32 @@ class AttachmentRepositoryImpl(
         val now = EntitySync.now()
         val previous = dao.getActiveByParentOnce(AttachmentParentType.TASK, taskSyncId)
             .filter { it.mimeType.startsWith("image/") }
+        previous.forEach { dao.markDeleted(it.id, now) }
+        previous.forEach { TransferHooks.onLocalTombstone(it) }
+    }
+
+    override suspend fun setSlotImage(
+        parentType: String,
+        parentSyncId: String,
+        mimeType: String,
+        name: String,
+        localPath: String,
+        syncId: String
+    ): Int {
+        require(SharedMedia.isSlot(parentType)) { "parentType no es un slot de media: $parentType" }
+        SharedMedia.requireImageMime(mimeType)
+        java.io.File(localPath).takeIf { it.isFile }?.let { SharedMedia.requireSize(it.length()) }
+        val now = EntitySync.now()
+        val previous = dao.getActiveByParentOnce(parentType, parentSyncId)
+        previous.forEach { dao.markDeleted(it.id, now) }
+        previous.forEach { TransferHooks.onLocalTombstone(it) }
+        return add(parentType, parentSyncId, mimeType, name, localPath, syncId)
+    }
+
+    override suspend fun clearSlot(parentType: String, parentSyncId: String) {
+        require(SharedMedia.isSlot(parentType)) { "parentType no es un slot de media: $parentType" }
+        val now = EntitySync.now()
+        val previous = dao.getActiveByParentOnce(parentType, parentSyncId)
         previous.forEach { dao.markDeleted(it.id, now) }
         previous.forEach { TransferHooks.onLocalTombstone(it) }
     }

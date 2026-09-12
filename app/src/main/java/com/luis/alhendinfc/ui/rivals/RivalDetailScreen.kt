@@ -90,7 +90,7 @@ fun RivalDetailScreen(
     links: List<RivalLink>,
     attachments: List<Attachment>,
     matchReports: List<MatchReportRef>,
-    onSaveClub: (OpponentClub) -> Unit,
+    onSaveClub: (OpponentClub, Uri?, Boolean) -> Unit,
     onSaveAnalysis: (RivalAnalysis) -> Unit,
     onPlayerQuery: (String) -> Unit,
     onAddPlayer: (String) -> Unit,
@@ -102,7 +102,8 @@ fun RivalDetailScreen(
     onMoveLink: (linkId: Int, up: Boolean) -> Unit,
     onAddFile: (Uri, String, String) -> Unit,
     onDeleteAttachment: (Attachment) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    shieldPath: String? = club?.shieldUri
 ) {
     var tab by remember { mutableIntStateOf(0) }
     var viewingPath by remember { mutableStateOf<String?>(null) }
@@ -167,6 +168,7 @@ fun RivalDetailScreen(
             when (tab) {
                 0 -> if (club != null) SummaryTab(
                     club = club,
+                    shieldPath = shieldPath,
                     onSave = onSaveClub,
                     onViewShield = { viewingPath = it }
                 )
@@ -214,7 +216,8 @@ fun RivalDetailScreen(
 @Composable
 private fun SummaryTab(
     club: OpponentClub,
-    onSave: (OpponentClub) -> Unit,
+    shieldPath: String?,
+    onSave: (OpponentClub, Uri?, Boolean) -> Unit,
     onViewShield: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -222,7 +225,9 @@ private fun SummaryTab(
     var shortName by remember(club.id, club.updatedAt) { mutableStateOf(club.shortName) }
     var stadium by remember(club.id, club.updatedAt) { mutableStateOf(club.stadium) }
     var kitColors by remember(club.id, club.updatedAt) { mutableStateOf(club.kitColors) }
-    var shieldUri by remember(club.id, club.updatedAt) { mutableStateOf(club.shieldUri) }
+    var shieldUri by remember(club.id, club.updatedAt, shieldPath) { mutableStateOf(shieldPath) }
+    var pickedUri by remember(club.id, club.updatedAt) { mutableStateOf<Uri?>(null) }
+    var clearedShield by remember(club.id, club.updatedAt) { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -231,6 +236,8 @@ private fun SummaryTab(
         } catch (_: SecurityException) {
         }
         shieldUri = uri.toString()
+        pickedUri = uri
+        clearedShield = false
     }
 
     Column(
@@ -255,7 +262,11 @@ private fun SummaryTab(
                     Text(if (shieldUri == null) "Añadir escudo" else "Cambiar escudo")
                 }
                 if (shieldUri != null) {
-                    TextButton(onClick = { shieldUri = null }) { Text("Quitar escudo") }
+                    TextButton(onClick = {
+                        shieldUri = null
+                        pickedUri = null
+                        clearedShield = true
+                    }) { Text("Quitar escudo") }
                 }
             }
         }
@@ -270,9 +281,10 @@ private fun SummaryTab(
                         name = name.trim(),
                         shortName = shortName.trim(),
                         stadium = stadium.trim(),
-                        kitColors = kitColors.trim(),
-                        shieldUri = shieldUri
-                    )
+                        kitColors = kitColors.trim()
+                    ),
+                    pickedUri,
+                    clearedShield
                 )
             },
             enabled = name.isNotBlank(),

@@ -1,6 +1,7 @@
 package com.luis.alhendinfc.ui.calendar
 
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -74,12 +75,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.luis.alhendinfc.domain.model.Attachment
 import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.SeasonFixture
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
@@ -95,6 +98,7 @@ fun CalendarScreen(
     fixtures: List<FixtureRow>,
     clubs: List<OpponentClub>,
     matches: List<Match>,
+    opponentShields: Map<String, Attachment> = emptyMap(),
     onPrepareMatch: (FixtureRow) -> Unit,
     onSaveFixture: (
         existingId: Int,
@@ -115,7 +119,7 @@ fun CalendarScreen(
     ) -> Unit,
     onDeleteFixture: (FixtureRow) -> Unit,
     onAddClub: (name: String, shortName: String, stadium: String, shieldUri: String?, kitColors: String) -> Unit,
-    onUpdateClub: (OpponentClub) -> Unit,
+    onUpdateClub: (OpponentClub, Uri?, Boolean) -> Unit,
     onDeleteClub: (OpponentClub) -> Unit,
     onOpenRivals: () -> Unit,
     onBack: () -> Unit
@@ -201,8 +205,8 @@ fun CalendarScreen(
         ClubEditorDialog(
             title = "Nuevo club rival",
             initial = null,
-            onConfirm = { name, short, stadium, uri, kitColors ->
-                onAddClub(name, short, stadium, uri, kitColors)
+            onConfirm = { name, short, stadium, uri, kitColors, picked, _ ->
+                onAddClub(name, short, stadium, picked?.toString() ?: uri, kitColors)
                 creatingClub = false
             },
             onDismiss = { creatingClub = false }
@@ -212,16 +216,19 @@ fun CalendarScreen(
     editingClub?.let { club ->
         ClubEditorDialog(
             title = "Editar club",
-            initial = club,
-            onConfirm = { name, short, stadium, uri, kitColors ->
+            initial = club.copy(
+                shieldUri = SharedMedia.displayPath(opponentShields[club.syncId], club.shieldUri)
+            ),
+            onConfirm = { name, short, stadium, _, kitColors, picked, clear ->
                 onUpdateClub(
                     club.copy(
                         name = name.trim(),
                         shortName = short.trim(),
                         stadium = stadium.trim(),
-                        shieldUri = uri?.trim()?.ifBlank { null },
                         kitColors = kitColors.trim()
-                    )
+                    ),
+                    picked,
+                    clear
                 )
                 editingClub = null
             },
@@ -339,6 +346,7 @@ fun CalendarScreen(
                 )
                 else -> ClubsTab(
                     clubs = clubs,
+                    opponentShields = opponentShields,
                     onOpenRivals = onOpenRivals,
                     onEdit = { editingClub = it },
                     onDelete = { pendingDelete = it }
@@ -684,6 +692,7 @@ private fun FixtureEditorDialog(
 @Composable
 private fun ClubsTab(
     clubs: List<OpponentClub>,
+    opponentShields: Map<String, Attachment>,
     onOpenRivals: () -> Unit,
     onEdit: (OpponentClub) -> Unit,
     onDelete: (OpponentClub) -> Unit
@@ -721,8 +730,9 @@ private fun ClubsTab(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val shieldPath = SharedMedia.displayPath(opponentShields[club.syncId], club.shieldUri)
                     LocalShieldThumb(
-                        shieldUri = club.shieldUri,
+                        shieldUri = shieldPath,
                         fallback = club.shortName.ifBlank { club.name }.take(1).uppercase(),
                         size = 48
                     )
@@ -742,10 +752,10 @@ private fun ClubsTab(
                             color = Color.White.copy(alpha = 0.7f)
                         )
                         Text(
-                            if (isLocalShieldUri(club.shieldUri)) "Escudo local"
+                            if (SharedMedia.isDisplayableLocal(shieldPath)) "Escudo"
                             else "Sin escudo",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (isLocalShieldUri(club.shieldUri)) GreenMint
+                            color = if (SharedMedia.isDisplayableLocal(shieldPath)) GreenMint
                             else Color.White.copy(alpha = 0.45f)
                         )
                     }
@@ -766,12 +776,7 @@ private fun ClubsTab(
     }
 }
 
-private fun isLocalShieldUri(uri: String?): Boolean {
-    if (uri.isNullOrBlank()) return false
-    val lower = uri.lowercase()
-    if (lower.startsWith("http://") || lower.startsWith("https://")) return false
-    return lower.startsWith("content://") || lower.startsWith("file://")
-}
+private fun isLocalShieldUri(uri: String?): Boolean = SharedMedia.isDisplayableLocal(uri)
 
 @Composable
 private fun LocalShieldThumb(
@@ -823,7 +828,9 @@ private fun ClubEditorDialog(
         shortName: String,
         stadium: String,
         shieldUri: String?,
-        kitColors: String
+        kitColors: String,
+        picked: Uri?,
+        clearShield: Boolean
     ) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -836,6 +843,8 @@ private fun ClubEditorDialog(
         mutableStateOf(initial?.shieldUri?.takeIf { isLocalShieldUri(it) })
     }
     var shieldBitmap by remember(shieldUri) { mutableStateOf<ImageBitmap?>(null) }
+    var pickedUri by remember { mutableStateOf<Uri?>(null) }
+    var clearedShield by remember { mutableStateOf(false) }
 
     LaunchedEffect(shieldUri) {
         val uri = shieldUri
@@ -858,6 +867,8 @@ private fun ClubEditorDialog(
         } catch (_: SecurityException) {
         }
         shieldUri = uri.toString()
+        pickedUri = uri
+        clearedShield = false
     }
 
     AlertDialog(
@@ -910,7 +921,12 @@ private fun ClubEditorDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (shieldUri != null) {
-                            TextButton(onClick = { shieldUri = null }) {
+                            TextButton(onClick = {
+                                shieldUri = null
+                                shieldBitmap = null
+                                pickedUri = null
+                                clearedShield = true
+                            }) {
                                 Text("Quitar escudo")
                             }
                         }
@@ -956,7 +972,9 @@ private fun ClubEditorDialog(
                             shortName,
                             stadium,
                             shieldUri?.takeIf { isLocalShieldUri(it) },
-                            kitColors
+                            kitColors,
+                            pickedUri,
+                            clearedShield
                         )
                     }
                 },

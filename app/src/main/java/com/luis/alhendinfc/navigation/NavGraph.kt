@@ -25,6 +25,7 @@ import com.luis.alhendinfc.domain.model.HomeModule
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.Player
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.model.StatisticType
 import com.luis.alhendinfc.ui.calendar.CalendarScreen
 import com.luis.alhendinfc.ui.calendar.CalendarViewModel
@@ -123,8 +124,9 @@ fun AlhendinNavGraph(navController: NavHostController) {
     val teamViewModel: TeamViewModel = viewModel(
         factory = TeamViewModel.factory(context.applicationContext)
     )
-    val teams by teamViewModel.teams.collectAsStateWithLifecycle()
+            val teams by teamViewModel.teams.collectAsStateWithLifecycle()
     val selectedTeam by teamViewModel.selectedTeam.collectAsStateWithLifecycle()
+    val teamShields by teamViewModel.teamShields.collectAsStateWithLifecycle()
 
     NavHost(
         navController = navController,
@@ -186,8 +188,9 @@ fun AlhendinNavGraph(navController: NavHostController) {
                     val teamId = selectedTeam?.id ?: return@HomeScreen
                     navController.navigate(AppScreen.Calendar.createRoute(teamId))
                 },
-                onAddTeam = { teamViewModel.addTeam(it) },
+                onAddTeam = { team, shield, _ -> teamViewModel.addTeam(team, shield) },
                 onSelectTeam = { teamViewModel.selectTeam(it) },
+                teamShields = teamShields,
                 connectionLabel = when (syncStatus) {
                     SyncUiStatus.OFFLINE -> "Sin conexión"
                     SyncUiStatus.PENDING -> "Pendiente de sincronizar"
@@ -204,11 +207,16 @@ fun AlhendinNavGraph(navController: NavHostController) {
                 factory = PlayerViewModel.factory(context.applicationContext, teamId)
             )
             val players by playerViewModel.players.collectAsStateWithLifecycle()
+            val teamShields by teamViewModel.teamShields.collectAsStateWithLifecycle()
 
             TeamScreen(
                 team = selectedTeam,
                 playerCount = players.size,
-                onSaveTeam = { teamViewModel.updateTeam(it) },
+                shieldPath = SharedMedia.displayPath(
+                    selectedTeam?.syncId?.let { teamShields[it] },
+                    selectedTeam?.shieldUri
+                ),
+                onSaveTeam = { team, shield, clear -> teamViewModel.updateTeam(team, shield, clear) },
                 onBack = { navController.popBackStack() },
                 onViewPlayers = {
                     if (teamId != -1) {
@@ -494,7 +502,9 @@ private fun PlayersRoute(
     )
 
     val players by playerViewModel.players.collectAsStateWithLifecycle()
+    val playerPhotos by playerViewModel.playerPhotos.collectAsStateWithLifecycle()
     val selectedTeam by teamViewModel.selectedTeam.collectAsStateWithLifecycle()
+    val teamShields by teamViewModel.teamShields.collectAsStateWithLifecycle()
     val selectedPlayer by playerViewModel.selectedPlayer.collectAsStateWithLifecycle()
 
     val statsVm: StatisticsViewModel = viewModel(
@@ -513,12 +523,15 @@ private fun PlayersRoute(
         PlayerEditDialog(
             currentPlayer = editingPlayer,
             teamId = teamId,
-            onConfirm = { player ->
+            previewPhotoPath = editingPlayer?.let {
+                SharedMedia.displayPath(playerPhotos[it.syncId], it.photoUri)
+            },
+            onConfirm = { player, photo, clearPhoto ->
                 if (editingPlayer != null) {
-                    playerViewModel.updatePlayer(player)
+                    playerViewModel.updatePlayer(player, photo, clearPhoto)
                     playerViewModel.selectPlayer(player)
                 } else {
-                    playerViewModel.addPlayer(player)
+                    playerViewModel.addPlayer(player, photo)
                 }
                 showAddDialog = false
                 editingPlayer = null
@@ -534,6 +547,10 @@ private fun PlayersRoute(
         PlayerDetailScreen(
             player = selectedPlayer!!,
             team = selectedTeam,
+            photoPath = SharedMedia.displayPath(playerPhotos[selectedPlayer!!.syncId], selectedPlayer!!.photoUri),
+            teamShieldPath = selectedTeam?.let {
+                SharedMedia.displayPath(teamShields[it.syncId], it.shieldUri)
+            },
             seasonStats = selectedStats,
             onEdit = { editingPlayer = selectedPlayer },
             onBack = { playerViewModel.selectPlayer(null) }
@@ -542,6 +559,12 @@ private fun PlayersRoute(
         PlayerListScreen(
             players = players,
             team = selectedTeam,
+            photoPaths = players.associate { p ->
+                p.id to SharedMedia.displayPath(playerPhotos[p.syncId], p.photoUri)
+            },
+            teamShieldPath = selectedTeam?.let {
+                SharedMedia.displayPath(teamShields[it.syncId], it.shieldUri)
+            },
             onAddPlayer = { showAddDialog = true },
             onPlayerClick = { player -> playerViewModel.selectPlayer(player) },
             onBack = onBack
@@ -670,10 +693,12 @@ private fun RivalsRoute(
     )
     val clubs by vm.clubs.collectAsStateWithLifecycle()
     val query by vm.query.collectAsStateWithLifecycle()
+    val opponentShields by vm.opponentShields.collectAsStateWithLifecycle()
     RivalListScreen(
         team = team,
         clubs = clubs,
         searchQuery = query,
+        opponentShields = opponentShields,
         onSearchChange = vm::setQuery,
         onOpenClub = { onOpenClub(it.id) },
         onAddClub = { name, shortName, stadium, shield, kit ->
@@ -701,6 +726,7 @@ private fun RivalDetailRoute(
     val links by vm.links.collectAsStateWithLifecycle()
     val attachments by vm.attachments.collectAsStateWithLifecycle()
     val matchReports by vm.matchReports.collectAsStateWithLifecycle()
+    val opponentShield by vm.opponentShield.collectAsStateWithLifecycle()
     RivalDetailScreen(
         club = club,
         analysis = analysis,
@@ -709,6 +735,7 @@ private fun RivalDetailRoute(
         links = links,
         attachments = attachments,
         matchReports = matchReports,
+        shieldPath = SharedMedia.displayPath(opponentShield, club?.shieldUri),
         onSaveClub = vm::saveClub,
         onSaveAnalysis = vm::saveAnalysis,
         onPlayerQuery = vm::setPlayerQuery,
@@ -743,12 +770,18 @@ private fun MonthCalendarRoute(
     val visibleMonth by vm.visibleMonth.collectAsStateWithLifecycle()
     val dayContents by vm.dayContents.collectAsStateWithLifecycle()
     val clubs by vm.clubs.collectAsStateWithLifecycle()
+    val fixtures by vm.fixtures.collectAsStateWithLifecycle()
+    val rivalShields by vm.opponentShields.collectAsStateWithLifecycle()
+    val teamShields by vm.teamShields.collectAsStateWithLifecycle()
 
     MonthCalendarScreen(
         team = team,
         visibleMonth = visibleMonth,
         dayContents = dayContents,
         clubs = clubs,
+        fixtures = fixtures,
+        rivalShields = rivalShields,
+        teamShields = teamShields,
         onPreviousMonth = vm::previousMonth,
         onNextMonth = vm::nextMonth,
         onGoToToday = vm::goToToday,
@@ -834,12 +867,14 @@ private fun CalendarRoute(
     val fixtures by vm.fixtures.collectAsStateWithLifecycle()
     val clubs by vm.clubs.collectAsStateWithLifecycle()
     val matches by vm.matches.collectAsStateWithLifecycle()
+    val opponentShields by vm.opponentShields.collectAsStateWithLifecycle()
 
     CalendarScreen(
         team = team,
         fixtures = fixtures,
         clubs = clubs,
         matches = matches,
+        opponentShields = opponentShields,
         onPrepareMatch = { row ->
             vm.openOrPrepareMatch(row) { matchId ->
                 onOpenMatch(matchId)
@@ -961,6 +996,8 @@ private fun LiveMatchRoute(
     }
 
     val current = match ?: return
+    val rivalShieldPath by liveVm.rivalShieldPath.collectAsStateWithLifecycle()
+    val liveTeamShields by liveVm.teamShields.collectAsStateWithLifecycle()
 
     val yellowCards = remember(events) {
         events.filter { it.type == StatisticType.YELLOW_CARD }
@@ -1009,7 +1046,12 @@ private fun LiveMatchRoute(
         onFinish = { onDone -> liveVm.finishMatch(onDone) },
         onBack = {
             if (current.status == MatchStatus.FINISHED) onFinished() else onBack()
-        }
+        },
+        rivalShieldPath = rivalShieldPath,
+        teamShieldPath = SharedMedia.displayPath(
+            team?.syncId?.let { liveTeamShields[it] },
+            team?.shieldUri
+        )
     )
 }
 

@@ -17,6 +17,7 @@ import com.luis.alhendinfc.domain.model.MatchEvent
 import com.luis.alhendinfc.domain.model.MatchPlayer
 import com.luis.alhendinfc.domain.model.MatchStatus
 import com.luis.alhendinfc.domain.model.Player
+import com.luis.alhendinfc.domain.model.SharedMedia
 import com.luis.alhendinfc.domain.repository.AttachmentRepository
 import com.luis.alhendinfc.domain.repository.AttachmentRepositoryImpl
 import com.luis.alhendinfc.domain.repository.CustomStatTypeRepositoryImpl
@@ -103,7 +104,14 @@ class MatchViewModel(
     }
 
     fun saveMatch(match: Match) {
-        viewModelScope.launch { matchRepository.updateMatch(match) }
+        viewModelScope.launch {
+            val stored = if (match.opponentClubId != null) {
+                match.copy(rivalShieldUri = match.rivalShieldUri)
+            } else {
+                match.copy(rivalShieldUri = SharedMedia.persistableLegacyUri(match.rivalShieldUri))
+            }
+            matchRepository.updateMatch(stored)
+        }
     }
 
     fun deleteCurrentMatch() {

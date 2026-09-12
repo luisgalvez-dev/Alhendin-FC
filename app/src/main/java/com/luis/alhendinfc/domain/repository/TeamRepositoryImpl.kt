@@ -18,6 +18,9 @@ class TeamRepositoryImpl(private val dao: TeamDao) : TeamRepository {
     override fun getSelectedTeam(): Flow<Team?> =
         dao.getSelectedTeam().map { it?.toDomain() }
 
+    override suspend fun getOnce(id: Int): Team? =
+        dao.getByIdOnce(id)?.toDomain()
+
     override suspend fun addTeam(team: Team): Int {
         val isFirst = dao.getTeamCount() == 0
         val stamped = EntityWrites.teamForInsert(
@@ -53,7 +56,8 @@ class TeamRepositoryImpl(private val dao: TeamDao) : TeamRepository {
         category = category,
         season = season,
         shieldUri = shieldUri,
-        isSelected = isSelected
+        isSelected = isSelected,
+        syncId = syncId
     )
 
     private fun Team.toEntity() = TeamEntity(
@@ -62,6 +66,7 @@ class TeamRepositoryImpl(private val dao: TeamDao) : TeamRepository {
         category = category,
         season = season,
         shieldUri = shieldUri,
-        isSelected = isSelected
+        isSelected = isSelected,
+        syncId = syncId
     )
 }

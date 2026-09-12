@@ -165,6 +165,26 @@ class CloudMappingTest {
     }
 
     @Test
+    fun playerPhotoSlot_mapsParentTypeWithoutLocalPath() {
+        val att = com.luis.alhendinfc.data.local.AttachmentEntity(
+            syncId = "att-photo-1",
+            parentType = "PLAYER_PHOTO",
+            parentSyncId = "player-sync",
+            mimeType = "image/jpeg",
+            name = "foto.jpg",
+            localPath = "/data/user/0/files/foto.jpg",
+            remotePath = "workspaces/alhendin-dev/attachments/att-photo-1/foto.jpg",
+            createdAt = 1L,
+            updatedAt = 2L
+        )
+        val doc = CloudMappers.attachment(att)
+        assertEquals("PLAYER_PHOTO", doc.data["parentType"])
+        assertEquals("player-sync", doc.data["parentSyncId"])
+        assertFalse(doc.data.containsKey("localPath"))
+        assertTrue(StoragePath.isPortableObjectPath(doc.str("remotePath")))
+    }
+
+    @Test
     fun rivalLinkCloud_keepsTypeAndUrl() {
         val row = com.luis.alhendinfc.data.local.RivalLinkEntity(
             id = 9,

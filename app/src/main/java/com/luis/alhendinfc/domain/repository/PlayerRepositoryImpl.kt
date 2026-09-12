@@ -25,10 +25,13 @@ class PlayerRepositoryImpl(
     override fun getPlayerById(id: Int): Flow<Player?> =
         dao.getById(id).map { it?.toDomain() }
 
-    override suspend fun addPlayer(player: Player) {
+    override suspend fun getOnce(id: Int): Player? =
+        dao.getByIdOnce(id)?.toDomain()
+
+    override suspend fun addPlayer(player: Player): Int {
         val stamped = EntityWrites.playerForInsert(player.toEntity(), EntitySync.now())
-        SyncHooks.local(SyncEntityType.PLAYER, stamped.syncId) {
-            dao.insert(stamped)
+        return SyncHooks.local(SyncEntityType.PLAYER, stamped.syncId) {
+            dao.insert(stamped).toInt()
         }
     }
 
@@ -66,7 +69,8 @@ class PlayerRepositoryImpl(
             Laterality.DERECHA
         },
         isActive = isActive,
-        observations = observations
+        observations = observations,
+        syncId = syncId
     )
 
     private fun Player.toEntity() = PlayerEntity(
@@ -81,6 +85,7 @@ class PlayerRepositoryImpl(
         weight = weight,
         laterality = laterality.name,
         isActive = isActive,
-        observations = observations
+        observations = observations,
+        syncId = syncId
     )
 }

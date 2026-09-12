@@ -68,13 +68,15 @@ fun PlayerDetailScreen(
     team: Team?,
     seasonStats: PlayerSeasonStats? = null,
     onEdit: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    photoPath: String? = player.photoUri,
+    teamShieldPath: String? = team?.shieldUri
 ) {
     val context = LocalContext.current
-    var bitmap by remember(player.photoUri) { mutableStateOf<ImageBitmap?>(null) }
+    var bitmap by remember(photoPath) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(player.photoUri) {
-        bitmap = LocalImageLoader.load(context, player.photoUri, maxSidePx = 512)
+    LaunchedEffect(photoPath) {
+        bitmap = LocalImageLoader.load(context, photoPath, maxSidePx = 512)
     }
 
     Column(
@@ -215,7 +217,7 @@ fun PlayerDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            TeamAvatar(team = team, size = 28)
+                            TeamAvatar(team = team, size = 28, shieldPath = teamShieldPath)
                             Text(
                                 text = team.name,
                                 style = MaterialTheme.typography.bodySmall,
