@@ -742,11 +742,13 @@ private fun MonthCalendarRoute(
     )
     val visibleMonth by vm.visibleMonth.collectAsStateWithLifecycle()
     val dayContents by vm.dayContents.collectAsStateWithLifecycle()
+    val clubs by vm.clubs.collectAsStateWithLifecycle()
 
     MonthCalendarScreen(
         team = team,
         visibleMonth = visibleMonth,
         dayContents = dayContents,
+        clubs = clubs,
         onPreviousMonth = vm::previousMonth,
         onNextMonth = vm::nextMonth,
         onGoToToday = vm::goToToday,

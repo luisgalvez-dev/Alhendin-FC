@@ -12,6 +12,7 @@ import com.luis.alhendinfc.domain.model.FixtureRow
 import com.luis.alhendinfc.domain.model.Match
 import com.luis.alhendinfc.domain.model.MatchLifecycle
 import com.luis.alhendinfc.domain.model.MatchStatus
+import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.Training
 import com.luis.alhendinfc.domain.repository.MatchRepositoryImpl
 import com.luis.alhendinfc.domain.repository.SeasonCalendarRepository
@@ -44,6 +45,10 @@ class MonthCalendarViewModel(
 
     val trainings: StateFlow<List<Training>> =
         trainingRepository.getByTeam(teamId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val clubs: StateFlow<List<OpponentClub>> =
+        calendarRepository.getClubs(teamId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val dayContents: StateFlow<Map<Long, CalendarDayContent>> =

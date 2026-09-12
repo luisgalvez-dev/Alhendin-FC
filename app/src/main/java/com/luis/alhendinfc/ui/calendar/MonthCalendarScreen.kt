@@ -1,10 +1,12 @@
 package com.luis.alhendinfc.ui.calendar
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -31,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,19 +45,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.luis.alhendinfc.domain.model.CalendarDayContent
 import com.luis.alhendinfc.domain.model.CalendarDayEntry
+import com.luis.alhendinfc.domain.model.CalendarDayVisual
 import com.luis.alhendinfc.domain.model.FixtureRow
+import com.luis.alhendinfc.domain.model.OpponentClub
 import com.luis.alhendinfc.domain.model.Team
 import com.luis.alhendinfc.ui.theme.AmberAccent
 import com.luis.alhendinfc.ui.theme.GreenAccent
 import com.luis.alhendinfc.ui.theme.GreenLime
 import com.luis.alhendinfc.ui.theme.GreenMint
+import com.luis.alhendinfc.ui.util.LocalImageLoader
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -68,6 +82,7 @@ fun MonthCalendarScreen(
     team: Team?,
     visibleMonth: YearMonth,
     dayContents: Map<Long, CalendarDayContent>,
+    clubs: List<OpponentClub> = emptyList(),
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onGoToToday: () -> Unit,
@@ -79,6 +94,7 @@ fun MonthCalendarScreen(
     onBack: () -> Unit
 ) {
     val today = remember { LocalDate.now() }
+    val clubsById = remember(clubs) { clubs.associateBy { it.id } }
     var pendingEmptyDay by remember { mutableStateOf<Long?>(null) }
     var pendingChoice by remember { mutableStateOf<CalendarDayContent?>(null) }
 
@@ -230,6 +246,8 @@ fun MonthCalendarScreen(
                                     date = date,
                                     isToday = date == today,
                                     content = dayContents[epoch],
+                                    clubsById = clubsById,
+                                    team = team,
                                     onClick = {
                                         val day = dayContents[epoch]
                                             ?: CalendarDayContent(epoch, null, null)
@@ -272,64 +290,239 @@ private fun MonthDayCell(
     date: LocalDate,
     isToday: Boolean,
     content: CalendarDayContent?,
+    clubsById: Map<Int, OpponentClub>,
+    team: Team?,
     onClick: () -> Unit
 ) {
-    val matchEntry = content?.matchOrFixture
+    val matchVisual = CalendarDayVisual.matchVisual(content?.matchOrFixture, clubsById, team)
     val training = content?.training
     val border = when {
         isToday -> GreenLime
         else -> Color.White.copy(alpha = 0.12f)
+    }
+    val background = when {
+        matchVisual != null -> Color(0xFF1A4A28)
+        training != null -> Color(0xFF2A2814)
+        else -> Color(0xFF143D1F)
+    }
+    val a11y = buildString {
+        append("Día ${date.dayOfMonth}")
+        if (isToday) append(", hoy")
+        matchVisual?.let { append(", ${it.contentDescription}") }
+        if (training != null) append(", entrenamiento")
     }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.85f)
             .clip(RoundedCornerShape(8.dp))
-            .background(Color(0xFF143D1F))
+            .background(background)
             .border(1.dp, border, RoundedCornerShape(8.dp))
+            .semantics(mergeDescendants = true) { contentDescription = a11y }
             .clickable(onClick = onClick)
-            .padding(4.dp)
+            .padding(horizontal = 3.dp, vertical = 3.dp)
     ) {
-        Text(
-            date.dayOfMonth.toString(),
-            color = if (isToday) GreenLime else Color.White,
-            fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-            fontSize = 13.sp
-        )
-        if (matchEntry != null) {
-            val label = when (matchEntry) {
-                is CalendarDayEntry.MatchEntry ->
-                    matchEntry.match.rival.ifBlank { "Partido" }
-                is CalendarDayEntry.FixtureEntry ->
-                    matchEntry.row.club?.displayShort
-                        ?: matchEntry.row.club?.name
-                        ?: "J${matchEntry.row.fixture.matchday}"
-                else -> "Partido"
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                date.dayOfMonth.toString(),
+                color = if (isToday) GreenLime else Color.White,
+                fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
+                fontSize = if (isToday) 16.sp else 15.sp,
+                modifier = Modifier.weight(1f)
+            )
+            if (matchVisual != null) {
+                Text(
+                    "P",
+                    color = GreenAccent,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
+            } else if (training != null) {
+                Text(
+                    "E",
+                    color = AmberAccent,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp
+                )
             }
-            DayChip(label, GreenAccent)
         }
-        if (training != null) {
-            DayChip("Entreno", AmberAccent)
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            val cellWidth = maxWidth
+            val cellHeight = maxHeight
+            val shortest = minOf(cellWidth, cellHeight)
+            val shieldSize = when {
+                shortest >= 72.dp -> 48.dp
+                shortest >= 60.dp -> 44.dp
+                shortest >= 48.dp -> 42.dp
+                else -> (shortest * 0.78f).coerceAtLeast(32.dp)
+            }.coerceAtMost(minOf(cellWidth * 0.88f, cellHeight * 0.72f, 52.dp))
+            val nameSize = when {
+                cellWidth >= 72.dp -> 14.sp
+                cellWidth >= 52.dp -> 13.sp
+                else -> 12.sp
+            }
+            val resultShield = minOf(
+                cellWidth * 0.30f,
+                cellHeight * 0.52f,
+                if (cellWidth >= 96.dp) 42.dp else if (cellWidth >= 72.dp) 38.dp else 34.dp
+            ).coerceIn(22.dp, 42.dp)
+            val scoreSize = when {
+                cellWidth >= 72.dp -> 18.sp
+                else -> 16.sp
+            }
+            if (matchVisual != null && matchVisual.showsResult) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CalendarShieldBadge(
+                            shieldUri = matchVisual.ourShieldUri,
+                            initials = matchVisual.ourInitials,
+                            contentDescription = "Escudo ${team?.name ?: "Alhendín"}",
+                            size = resultShield
+                        )
+                        Text(
+                            matchVisual.scoreLabel,
+                            color = Color.White,
+                            fontSize = scoreSize,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 2.dp)
+                        )
+                        CalendarShieldBadge(
+                            shieldUri = matchVisual.shieldUri,
+                            initials = matchVisual.initials,
+                            contentDescription = if (matchVisual.hasRival) {
+                                "Escudo ${matchVisual.displayName}"
+                            } else {
+                                "Rival"
+                            },
+                            size = resultShield
+                        )
+                    }
+                    Text(
+                        matchVisual.displayName,
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = nameSize,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            } else if (matchVisual != null) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    CalendarShieldBadge(
+                        shieldUri = matchVisual.shieldUri,
+                        initials = matchVisual.initials,
+                        contentDescription = if (matchVisual.hasRival) {
+                            "Escudo ${matchVisual.displayName}"
+                        } else {
+                            "Partido"
+                        },
+                        size = shieldSize
+                    )
+                    Text(
+                        matchVisual.displayName,
+                        color = Color.White,
+                        fontSize = nameSize,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            } else if (training != null) {
+                Text(
+                    "Entreno",
+                    color = AmberAccent,
+                    fontSize = nameSize,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(AmberAccent.copy(alpha = 0.18f))
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                )
+            }
+        }
+        if (matchVisual != null && training != null) {
+            Text(
+                "E",
+                color = AmberAccent,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.End)
+            )
         }
     }
 }
 
 @Composable
-private fun DayChip(text: String, color: Color) {
-    Text(
-        text,
-        color = color,
-        fontSize = 9.sp,
-        fontWeight = FontWeight.SemiBold,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+private fun CalendarShieldBadge(
+    shieldUri: String?,
+    initials: String,
+    contentDescription: String,
+    size: Dp
+) {
+    val context = LocalContext.current
+    var bitmap by remember(shieldUri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(shieldUri) {
+        bitmap = LocalImageLoader.load(
+            context,
+            shieldUri,
+            maxSidePx = (size.value * 3).toInt().coerceAtLeast(144)
+        )
+    }
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 2.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.18f))
-            .padding(horizontal = 3.dp, vertical = 1.dp)
-    )
+            .size(size)
+            .clip(CircleShape)
+            .background(GreenAccent.copy(alpha = 0.22f))
+            .border(1.dp, GreenAccent.copy(alpha = 0.45f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(size * 0.08f)
+            )
+        } else {
+            Text(
+                initials,
+                fontWeight = FontWeight.Bold,
+                color = GreenMint,
+                fontSize = (size.value * 0.32f).sp,
+                maxLines = 1
+            )
+        }
+    }
 }
 
 @Composable
